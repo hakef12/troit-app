@@ -17,10 +17,21 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// En Render, UPLOADS_DIR vive en el disco persistente (vacio en el primer deploy).
+// Copiamos ahi las imagenes semilla del repo (promos, fotos reales) una sola vez,
+// sin pisar nada que un admin ya haya subido despues.
+const REPO_UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (path.resolve(REPO_UPLOADS_DIR) !== path.resolve(UPLOADS_DIR)) {
+  for (const file of fs.readdirSync(REPO_UPLOADS_DIR)) {
+    const dest = path.join(UPLOADS_DIR, file);
+    if (!fs.existsSync(dest)) fs.copyFileSync(path.join(REPO_UPLOADS_DIR, file), dest);
+  }
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

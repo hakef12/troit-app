@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://troit-api.onrender.com/api/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://troit-api.onrender.com/uploads/:path*" }
+  ]
+}

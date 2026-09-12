@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { requireAuth, requireAdmin } from '../auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
+// En produccion (Render) DATA_DIR apunta al disco persistente; en local queda
+// dentro de server/ como antes.
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', '..');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 
 const ALLOWED_TYPES = {
   'image/jpeg': '.jpg',

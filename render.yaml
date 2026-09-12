@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: troit-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: troit-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WHATSAPP_NUMBER
+        value: "593985206063"
+      - key: POINTS_PER_UNIT
+        value: "1"
+      - key: RESTAURANT_NAME
+        value: Troit
+      - key: RESTAURANT_ADDRESS
+        value: "Autopista Narcisa de Jesús, Sauces, Guayaquil, Ecuador"
+      - key: RESTAURANT_LAT
+        value: "-2.126601"
+      - key: RESTAURANT_LNG
+        value: "-79.882728"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
