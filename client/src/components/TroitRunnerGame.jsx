@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import mascotImg from '../assets/mascot-sticker.png';
 
 const WIDTH = 600;
-const HEIGHT = 200;
+const HEIGHT = 260;
 const GROUND_Y = HEIGHT - 30;
 const GRAVITY = 0.9;
 const JUMP_VELOCITY = -13;
