@@ -125,10 +125,12 @@ ensureColumn('users', 'google_id', 'TEXT');
 function seed() {
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   if (userCount === 0) {
-    const hash = bcrypt.hashSync('admin123', 10);
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@restaurante.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const hash = bcrypt.hashSync(adminPassword, 10);
     db.prepare(
       `INSERT INTO users (name, email, password_hash, role, points) VALUES (?, ?, ?, 'admin', 0)`
-    ).run('Administrador', 'admin@restaurante.com', hash);
+    ).run('Administrador', adminEmail, hash);
   }
 
   const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;

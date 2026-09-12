@@ -68,7 +68,6 @@ export default function Login() {
       <p className="muted">
         ¿No tienes cuenta? <Link to="/register">Regístrate aquí</Link>
       </p>
-      <p className="muted small">Admin de prueba: admin@restaurante.com / admin123</p>
       <div className="device-note">
         <LottieIcon animationData={computerAnim} size={40} />
         <span className="muted small">Funciona en tu celular, tablet o computadora — sin instalar nada.</span>
