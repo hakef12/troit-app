@@ -857,6 +857,14 @@ h2 {
   cursor: not-allowed;
 }
 
+.directions-link {
+  display: block;
+  width: 100%;
+  margin-top: 0.6rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
 .pickup-info {
   background: var(--surface);
   border: 2px solid var(--border);

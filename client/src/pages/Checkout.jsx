@@ -265,7 +265,9 @@ export default function Checkout() {
               <strong>{storeInfo?.name || 'Local'}</strong>
               <p className="muted small">{storeInfo?.address}</p>
             </div>
-            {storeInfo && <AddressMap lat={storeInfo.lat} lng={storeInfo.lng} interactive={false} />}
+            {storeInfo && (
+              <AddressMap lat={storeInfo.lat} lng={storeInfo.lng} interactive={false} showDirectionsLink />
+            )}
           </>
         )}
 

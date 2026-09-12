@@ -27,7 +27,7 @@ function Recenter({ lat, lng }) {
   return null;
 }
 
-export default function AddressMap({ lat, lng, onPick, interactive = true, showLocateButton = false, height = 240 }) {
+export default function AddressMap({ lat, lng, onPick, interactive = true, showLocateButton = false, showDirectionsLink = false, height = 240 }) {
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
 
@@ -91,6 +91,16 @@ export default function AddressMap({ lat, lng, onPick, interactive = true, showL
           </button>
         )}
       </div>
+      {showDirectionsLink && (
+        <a
+          className="btn secondary directions-link"
+          href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          🧭 Cómo llegar (Google Maps)
+        </a>
+      )}
       {locateError && <p className="alert error small">{locateError}</p>}
     </div>
   );
