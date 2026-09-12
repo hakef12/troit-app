@@ -5,6 +5,8 @@ import mascotReading from '../assets/mascot-reading-menu.png';
 import mascotSticker from '../assets/mascot-sticker.png';
 import Carousel from '../components/Carousel.jsx';
 import DraggableSticker from '../components/DraggableSticker.jsx';
+import DraggableLottie from '../components/DraggableLottie.jsx';
+import overwhelmedMindAnim from '../assets/lottie/overwhelmed-mind.json';
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -103,6 +105,7 @@ export default function Menu() {
       </div>
 
       <DraggableSticker src={mascotSticker} />
+      <DraggableLottie animationData={overwhelmedMindAnim} />
 
       <div className="product-grid">
         {visible.map((p) => (

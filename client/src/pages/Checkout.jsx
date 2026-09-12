@@ -12,6 +12,7 @@ import confettiAnim from '../assets/lottie/confetti.json';
 import successCheckAnim from '../assets/lottie/success-check.json';
 import fiatAnim from '../assets/lottie/fiat.json';
 import walletAnim from '../assets/lottie/wallet.json';
+import foodDeliveryAnim from '../assets/lottie/food-delivery.json';
 
 const FALLBACK_CENTER = { lat: -34.6037, lng: -58.3816 };
 
@@ -211,7 +212,7 @@ export default function Checkout() {
             className={deliveryType === 'delivery' ? 'tab active' : 'tab'}
             onClick={() => setDeliveryType('delivery')}
           >
-            🛵 A domicilio
+            <LottieIcon animationData={foodDeliveryAnim} size={26} /> A domicilio
           </button>
           <button
             type="button"
