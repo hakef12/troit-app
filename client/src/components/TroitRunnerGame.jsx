@@ -193,7 +193,7 @@ export default function TroitRunnerGame() {
           <div className="runner-overlay">
             {phase === 'idle' && imgReady && (
               <>
-                <p>Tocá o presioná espacio para jugar</p>
+                <p>Toca o presiona espacio para jugar</p>
                 <p className="muted small">Cada {POINTS_PER_SCORE} puntos de juego = 1 punto de fidelización</p>
               </>
             )}
@@ -208,13 +208,13 @@ export default function TroitRunnerGame() {
                         ? `¡Ganaste ${awardInfo.awarded} punto${awardInfo.awarded === 1 ? '' : 's'} de fidelización!`
                         : awardInfo.dailyCapReached
                         ? 'Ya alcanzaste el máximo de puntos por juego de hoy'
-                        : `Necesitás ${POINTS_PER_SCORE} puntos de juego para ganar 1 punto`}
+                        : `Necesitas ${POINTS_PER_SCORE} puntos de juego para ganar 1 punto`}
                     </p>
                   )
                 ) : (
                   <p className="muted small">Inicia sesión para ganar puntos jugando</p>
                 )}
-                <p>Tocá para volver a intentar</p>
+                <p>Toca para volver a intentar</p>
               </>
             )}
           </div>

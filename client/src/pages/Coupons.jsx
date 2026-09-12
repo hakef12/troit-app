@@ -65,8 +65,8 @@ export default function Coupons() {
         ))}
       </div>
 
-      <h2>🎮 Jugá con Troit</h2>
-      <p className="muted small">Saltá los obstáculos con espacio (o tocando la pantalla).</p>
+      <h2>🎮 Juega con Troit</h2>
+      <p className="muted small">Salta los obstáculos con espacio (o tocando la pantalla).</p>
       <TroitRunnerGame />
 
       {user && available.length > 0 && (
