@@ -9,30 +9,32 @@ import productRoutes from './routes/products.js';
 import couponRoutes from './routes/coupons.js';
 import orderRoutes from './routes/orders.js';
 import storeRoutes from './routes/store.js';
-import uploadRoutes, { UPLOADS_DIR } from './routes/uploads.js';
+import uploadRoutes from './routes/uploads.js';
 import promoRoutes from './routes/promos.js';
 import bannerRoutes from './routes/banners.js';
 import gameRoutes from './routes/game.js';
-
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+import { initDb } from './db.js';
+import { ensureBucket, uploadFile } from './supabaseStorage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// En Render, UPLOADS_DIR vive en el disco persistente (vacio en el primer deploy).
-// Copiamos ahi las imagenes semilla del repo (promos, fotos reales) una sola vez,
-// sin pisar nada que un admin ya haya subido despues.
-const REPO_UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
-if (path.resolve(REPO_UPLOADS_DIR) !== path.resolve(UPLOADS_DIR)) {
-  for (const file of fs.readdirSync(REPO_UPLOADS_DIR)) {
-    const dest = path.join(UPLOADS_DIR, file);
-    if (!fs.existsSync(dest)) fs.copyFileSync(path.join(REPO_UPLOADS_DIR, file), dest);
+// Imagenes semilla del repo (promos, fotos reales) que suben a Supabase Storage
+// en cada arranque (upsert, no pisa nada distinto y no hace falta disco persistente).
+async function seedUploadAssets() {
+  const seedDir = path.join(__dirname, '..', 'uploads');
+  if (!fs.existsSync(seedDir)) return;
+  const mimeByExt = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+  for (const file of fs.readdirSync(seedDir)) {
+    const ext = path.extname(file).toLowerCase();
+    if (!mimeByExt[ext]) continue;
+    const buffer = fs.readFileSync(path.join(seedDir, file));
+    await uploadFile(file, buffer, mimeByExt[ext]);
   }
 }
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(UPLOADS_DIR));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -52,6 +54,17 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`API de fidelización escuchando en http://localhost:${PORT}`);
+
+async function start() {
+  await ensureBucket();
+  await seedUploadAssets();
+  await initDb();
+  app.listen(PORT, () => {
+    console.log(`API de fidelización escuchando en http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Error al iniciar el servidor:', err);
+  process.exit(1);
 });

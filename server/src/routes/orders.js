@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db, { transaction } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
 import { haversineKm, getDeliveryFee } from '../deliveryPricing.js';
+import { ah } from '../asyncHandler.js';
 
 const router = Router();
 const POINTS_PER_UNIT = Number(process.env.POINTS_PER_UNIT || 1000);
@@ -51,7 +52,7 @@ function buildWhatsappMessage({ order, items, user }) {
   return lines.join('\n');
 }
 
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, ah(async (req, res) => {
   const { items, address, payment_method, redemption_id, delivery_type, lat, lng } = req.body || {};
 
   const deliveryType = delivery_type === 'pickup' ? 'pickup' : 'delivery';
@@ -66,13 +67,13 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Método de pago inválido (debe ser efectivo o transferencia)' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
 
   // Resolver productos y precios desde la base de datos (nunca confiar en el precio del cliente)
   const resolvedItems = [];
   let subtotal = 0;
   for (const it of items) {
-    const product = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(it.product_id);
+    const product = await db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(it.product_id);
     if (!product) return res.status(400).json({ error: `Producto ${it.product_id} no disponible` });
     const qty = Math.max(1, Number(it.qty) || 1);
     resolvedItems.push({ id: product.id, name: product.name, price: product.price, qty });
@@ -83,7 +84,7 @@ router.post('/', requireAuth, (req, res) => {
   let discount = 0;
   let redemption = null;
   if (redemption_id) {
-    redemption = db
+    redemption = await db
       .prepare(
         `SELECT r.*, c.discount_type, c.discount_value, c.title FROM redemptions r
          JOIN coupons c ON c.id = r.coupon_id WHERE r.id = ? AND r.user_id = ? AND r.used = 0`
@@ -110,8 +111,8 @@ router.post('/', requireAuth, (req, res) => {
 
   const total = Math.round((foodTotal + deliveryFee) * 100) / 100;
 
-  const createOrder = () => transaction(() => {
-    const info = db
+  const orderId = await transaction(async () => {
+    const info = await db
       .prepare(
         `INSERT INTO orders (user_id, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?)`
@@ -132,16 +133,15 @@ router.post('/', requireAuth, (req, res) => {
         deliveryFee,
         deliveryKm
       );
-    db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
+    await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
     if (redemption) {
-      db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(info.lastInsertRowid, redemption.id);
+      await db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(info.lastInsertRowid, redemption.id);
     }
     return info.lastInsertRowid;
   });
 
-  const orderId = createOrder();
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-  const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  const updatedUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
 
   const message = buildWhatsappMessage({ order, items: resolvedItems, user: updatedUser });
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
@@ -152,50 +152,50 @@ router.post('/', requireAuth, (req, res) => {
     whatsappUrl,
     whatsappMessage: message,
   });
-});
+}));
 
-router.get('/mine', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC').all(req.userId);
+router.get('/mine', requireAuth, ah(async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC').all(req.userId);
   res.json({ orders: rows.map((o) => ({ ...o, items: JSON.parse(o.items_json) })) });
-});
+}));
 
-router.get('/', requireAuth, requireAdmin, (req, res) => {
-  const rows = db
+router.get('/', requireAuth, requireAdmin, ah(async (req, res) => {
+  const rows = await db
     .prepare(
       `SELECT o.*, u.name AS customer_name, u.phone AS customer_phone FROM orders o
        JOIN users u ON u.id = o.user_id ORDER BY o.created_at DESC`
     )
     .all();
   res.json({ orders: rows.map((o) => ({ ...o, items: JSON.parse(o.items_json) })) });
-});
+}));
 
-router.put('/:id/status', requireAuth, requireAdmin, (req, res) => {
+router.put('/:id/status', requireAuth, requireAdmin, ah(async (req, res) => {
   const { status } = req.body || {};
   const allowed = ['pendiente', 'confirmado', 'en preparación', 'entregado', 'cancelado'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado inválido' });
-  const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+  const existing = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
 
-  transaction(() => {
+  await transaction(async () => {
     // Al cancelar un pedido, se revierten los puntos que había ganado y se
     // libera el cupón canjeado (si usó uno) para que pueda volver a usarlo.
     // Al destantar la cancelación, se vuelven a aplicar ambos efectos.
     if (status === 'cancelado' && existing.status !== 'cancelado') {
-      db.prepare('UPDATE users SET points = MAX(points - ?, 0) WHERE id = ?').run(existing.points_earned, existing.user_id);
+      await db.prepare('UPDATE users SET points = GREATEST(points - ?, 0) WHERE id = ?').run(existing.points_earned, existing.user_id);
       if (existing.redemption_id) {
-        db.prepare('UPDATE redemptions SET used = 0, order_id = NULL WHERE id = ?').run(existing.redemption_id);
+        await db.prepare('UPDATE redemptions SET used = 0, order_id = NULL WHERE id = ?').run(existing.redemption_id);
       }
     } else if (status !== 'cancelado' && existing.status === 'cancelado') {
-      db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(existing.points_earned, existing.user_id);
+      await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(existing.points_earned, existing.user_id);
       if (existing.redemption_id) {
-        db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(existing.id, existing.redemption_id);
+        await db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(existing.id, existing.redemption_id);
       }
     }
-    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
+    await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
   });
 
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   res.json({ order: { ...order, items: JSON.parse(order.items_json) } });
-});
+}));
 
 export default router;

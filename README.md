@@ -12,7 +12,7 @@ Prototipo funcional: web app (PWA) que funciona en iPhone, Android y PC desde el
 
 ```
 restaurant-loyalty/
-├── server/   API (Node + Express + SQLite integrado en Node)
+├── server/   API (Node + Express + Postgres en Supabase)
 └── client/   App web (React + Vite, instalable como PWA)
 ```
 
@@ -26,9 +26,11 @@ npm install
 npm start
 ```
 
-Corre en `http://localhost:4000`. La base de datos SQLite se crea sola (`server/data.sqlite`) con datos de ejemplo (productos, cupones y un usuario admin).
+Corre en `http://localhost:4000`. Las tablas y los datos de ejemplo (productos, cupones y un usuario admin) se crean solos en Postgres la primera vez que arranca.
 
-**Antes de usarlo con clientes reales**, edita `server/.env`:
+**Necesitás un proyecto de [Supabase](https://supabase.com) (gratis)** para la base de datos y el almacenamiento de imágenes. En `server/.env` (o `server/.env.example` como referencia):
+- `DATABASE_URL`: en tu proyecto de Supabase, botón **Connect → Direct connection** (usá **Session pooler** si tu servidor sale a internet por IPv4, que es lo normal) y copiá la cadena, reemplazando `[YOUR-PASSWORD]` por la contraseña de la base que elegiste al crear el proyecto.
+- `SUPABASE_URL` y `SUPABASE_SERVICE_KEY`: en **Settings → API Keys** de tu proyecto. Usá la **secret key** (nunca la publishable/anon en el backend).
 - `WHATSAPP_NUMBER`: el número de WhatsApp del restaurante en formato internacional sin `+` ni espacios (ej. `5491122334455`).
 - `POINTS_PER_UNIT`: cuántos dólares hay que gastar para ganar 1 punto (por defecto, 1 punto por cada $1 — los precios del local son en USD).
 - `JWT_SECRET`: cámbialo por un valor secreto propio antes de publicar la app.
@@ -59,8 +61,8 @@ Al publicar la app (ver más abajo), tus clientes entran desde el navegador de s
 
 Este prototipo corre en tu máquina. Para que tus clientes lo usen desde afuera necesitas:
 
-1. **Alojar el backend** (`server/`) en un servicio como Render, Railway o un VPS. Necesita disco persistente porque guarda tres cosas ahí: la base de datos (`data.sqlite`), las imágenes subidas (`uploads/`) y el `.env`.
-2. **Base de datos**: hoy es un archivo SQLite — funciona bien y sin costo mientras el volumen de pedidos sea moderado (un restaurante, unos cientos de pedidos por día). Si más adelante escalas a varios locales o mucho tráfico simultáneo, conviene migrar a Postgres (Render, Railway y Supabase ofrecen un plan gratuito); avísame cuando llegue ese momento y hago la migración.
+1. **Alojar el backend** (`server/`) en un servicio como Render, Railway o un VPS. No necesita disco persistente — la base de datos (Postgres) y las imágenes (Supabase Storage) viven afuera, en Supabase.
+2. **Base de datos y almacenamiento**: Postgres + Storage en Supabase, plan gratuito. No se pierden datos aunque el servidor se reinicie o se redeploye.
 3. **Alojar el frontend** (`client/`, generado con `npm run build` en la carpeta `dist/`) en Vercel, Netlify o el mismo servidor del backend.
 4. Configurar la variable de entorno del frontend para apuntar a la URL pública del backend (hoy usa rutas relativas `/api`, pensadas para que ambos convivan bajo el mismo dominio o detrás de un proxy).
 5. Usar HTTPS (necesario para que la PWA sea instalable y para que el GPS del mapa funcione en producción).

@@ -1,143 +1,176 @@
-import { DatabaseSync } from 'node:sqlite';
+import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { publicUrl } from './supabaseStorage.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// En produccion (Render) DATA_DIR apunta al disco persistente; en local queda
-// dentro de server/ como antes.
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..');
-const db = new DatabaseSync(path.join(DATA_DIR, 'data.sqlite'));
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
+const { Pool } = pg;
 
-export function transaction(fn) {
-  db.exec('BEGIN');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+const als = new AsyncLocalStorage();
+
+function toPgQuery(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+async function raw(sql, params = []) {
+  const client = als.getStore();
+  if (client) return client.query(sql, params);
+  return pool.query(sql, params);
+}
+
+// Envoltorio compatible con la API sincrónica de better-sqlite3 (prepare().get/all/run)
+// que ya usan las rutas, pero async por dentro contra Postgres. Esto permite mantener
+// las mismas consultas con "?" y agregar simplemente `await` en cada llamada.
+export function prepare(sql) {
+  const pgSql = toPgQuery(sql);
+  const isInsert = /^\s*insert/i.test(sql) && !/returning/i.test(sql);
+  const insertSql = isInsert ? `${pgSql} RETURNING id` : pgSql;
+  return {
+    async get(...params) {
+      const { rows } = await raw(pgSql, params);
+      return rows[0];
+    },
+    async all(...params) {
+      const { rows } = await raw(pgSql, params);
+      return rows;
+    },
+    async run(...params) {
+      const { rows, rowCount } = await raw(insertSql, params);
+      return { lastInsertRowid: rows[0]?.id, changes: rowCount };
+    },
+  };
+}
+
+export async function exec(sql) {
+  await raw(sql);
+}
+
+export async function transaction(fn) {
+  const client = await pool.connect();
   try {
-    const result = fn();
-    db.exec('COMMIT');
+    await client.query('BEGIN');
+    const result = await als.run(client, fn);
+    await client.query('COMMIT');
     return result;
   } catch (err) {
-    db.exec('ROLLBACK');
+    await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
   }
 }
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT,
-  google_id TEXT UNIQUE,
-  phone TEXT,
-  address TEXT,
-  role TEXT NOT NULL DEFAULT 'cliente',
-  points INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+const db = { prepare, exec };
+export default db;
 
-CREATE TABLE IF NOT EXISTS products (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  description TEXT,
-  price REAL NOT NULL,
-  category TEXT,
-  image_url TEXT,
-  active INTEGER NOT NULL DEFAULT 1
-);
+async function ensureSchema() {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT,
+      google_id TEXT UNIQUE,
+      phone TEXT,
+      address TEXT,
+      role TEXT NOT NULL DEFAULT 'cliente',
+      points INTEGER NOT NULL DEFAULT 0,
+      game_points_today INTEGER NOT NULL DEFAULT 0,
+      game_points_date TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
 
-CREATE TABLE IF NOT EXISTS coupons (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  description TEXT,
-  points_cost INTEGER NOT NULL,
-  discount_type TEXT NOT NULL DEFAULT 'fixed', -- 'fixed' o 'percentage'
-  discount_value REAL NOT NULL,
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      price REAL NOT NULL,
+      category TEXT,
+      image_url TEXT,
+      active INTEGER NOT NULL DEFAULT 1
+    );
 
-CREATE TABLE IF NOT EXISTS redemptions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  coupon_id INTEGER NOT NULL REFERENCES coupons(id),
-  points_spent INTEGER NOT NULL,
-  used INTEGER NOT NULL DEFAULT 0,
-  order_id INTEGER,
-  redeemed_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+    CREATE TABLE IF NOT EXISTS coupons (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      points_cost INTEGER NOT NULL,
+      discount_type TEXT NOT NULL DEFAULT 'fixed',
+      discount_value REAL NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
 
-CREATE TABLE IF NOT EXISTS orders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  items_json TEXT NOT NULL,
-  subtotal REAL NOT NULL,
-  discount REAL NOT NULL DEFAULT 0,
-  total REAL NOT NULL,
-  payment_method TEXT NOT NULL, -- 'efectivo' o 'transferencia'
-  address TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pendiente',
-  points_earned INTEGER NOT NULL DEFAULT 0,
-  redemption_id INTEGER,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  delivery_type TEXT NOT NULL DEFAULT 'delivery', -- 'delivery' o 'pickup'
-  lat REAL,
-  lng REAL,
-  delivery_fee REAL NOT NULL DEFAULT 0,
-  delivery_km REAL
-);
+    CREATE TABLE IF NOT EXISTS redemptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      coupon_id INTEGER NOT NULL REFERENCES coupons(id),
+      points_spent INTEGER NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0,
+      order_id INTEGER,
+      redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
 
-CREATE TABLE IF NOT EXISTS promos (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  day_of_week INTEGER NOT NULL, -- 0=domingo, 1=lunes, ... 6=sábado (igual que Date.getDay())
-  title TEXT NOT NULL,
-  description TEXT,
-  image_url TEXT,
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+    CREATE TABLE IF NOT EXISTS orders (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      items_json TEXT NOT NULL,
+      subtotal REAL NOT NULL,
+      discount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL,
+      payment_method TEXT NOT NULL,
+      address TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pendiente',
+      points_earned INTEGER NOT NULL DEFAULT 0,
+      redemption_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      delivery_type TEXT NOT NULL DEFAULT 'delivery',
+      lat REAL,
+      lng REAL,
+      delivery_fee REAL NOT NULL DEFAULT 0,
+      delivery_km REAL
+    );
 
-CREATE TABLE IF NOT EXISTS banners (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT,
-  image_url TEXT NOT NULL,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`);
+    CREATE TABLE IF NOT EXISTS promos (
+      id SERIAL PRIMARY KEY,
+      day_of_week INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      image_url TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
 
-function ensureColumn(table, column, definition) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
-  if (!cols.some((c) => c.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
+    CREATE TABLE IF NOT EXISTS banners (
+      id SERIAL PRIMARY KEY,
+      title TEXT,
+      image_url TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
 }
 
-ensureColumn('orders', 'delivery_type', "TEXT NOT NULL DEFAULT 'delivery'");
-ensureColumn('orders', 'lat', 'REAL');
-ensureColumn('orders', 'lng', 'REAL');
-ensureColumn('orders', 'delivery_fee', 'REAL NOT NULL DEFAULT 0');
-ensureColumn('orders', 'delivery_km', 'REAL');
-ensureColumn('users', 'google_id', 'TEXT');
-ensureColumn('users', 'game_points_today', 'INTEGER NOT NULL DEFAULT 0');
-ensureColumn('users', 'game_points_date', 'TEXT');
-
-function seed() {
-  const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+async function seed() {
+  const { c: userCount } = (await prepare('SELECT COUNT(*)::int AS c FROM users').get()) || { c: 0 };
   if (userCount === 0) {
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@restaurante.com';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const hash = bcrypt.hashSync(adminPassword, 10);
-    db.prepare(
+    await prepare(
       `INSERT INTO users (name, email, password_hash, role, points) VALUES (?, ?, ?, 'admin', 0)`
     ).run('Administrador', adminEmail, hash);
   }
 
-  const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
+  const { c: productCount } = (await prepare('SELECT COUNT(*)::int AS c FROM products').get()) || { c: 0 };
   if (productCount === 0) {
-    const insert = db.prepare(
+    const insert = prepare(
       `INSERT INTO products (name, description, price, category, image_url) VALUES (?, ?, ?, ?, ?)`
     );
     const items = [
@@ -166,31 +199,32 @@ function seed() {
       ['Sprite', '', 1.25, 'Bebidas', ''],
       ['Fuze Tea', '', 1.25, 'Bebidas', ''],
     ];
-    for (const item of items) insert.run(...item);
+    for (const item of items) await insert.run(...item);
   }
 
-  const couponCount = db.prepare('SELECT COUNT(*) AS c FROM coupons').get().c;
+  const { c: couponCount } = (await prepare('SELECT COUNT(*)::int AS c FROM coupons').get()) || { c: 0 };
   if (couponCount === 0) {
-    const insert = db.prepare(
+    const insert = prepare(
       `INSERT INTO coupons (title, description, points_cost, discount_type, discount_value) VALUES (?, ?, ?, ?, ?)`
     );
-    insert.run('10% de descuento', 'Descuento del 10% sobre el total de tu pedido', 50, 'percentage', 10);
-    insert.run('$5 de descuento', 'Descuento fijo de $5.00 en tu pedido', 80, 'fixed', 5);
-    insert.run('Bebida gratis', 'Descuento equivalente a una bebida', 15, 'fixed', 1.25);
+    await insert.run('10% de descuento', 'Descuento del 10% sobre el total de tu pedido', 50, 'percentage', 10);
+    await insert.run('$5 de descuento', 'Descuento fijo de $5.00 en tu pedido', 80, 'fixed', 5);
+    await insert.run('Bebida gratis', 'Descuento equivalente a una bebida', 15, 'fixed', 1.25);
   }
 
-  const promoCount = db.prepare('SELECT COUNT(*) AS c FROM promos').get().c;
+  const { c: promoCount } = (await prepare('SELECT COUNT(*)::int AS c FROM promos').get()) || { c: 0 };
   if (promoCount === 0) {
-    const insert = db.prepare(
+    const insert = prepare(
       `INSERT INTO promos (day_of_week, title, description, image_url) VALUES (?, ?, ?, ?)`
     );
-    insert.run(1, '2 Reinas por $11.99', 'Válido en todas las pizzas individuales', '/uploads/promo-lunes.jpg');
-    insert.run(2, '2da pizza a mitad de precio (-50%)', 'Válido en todas las pizzas individuales', '/uploads/promo-martes.jpg');
-    insert.run(3, '2 Hot Chicken por $13.99', 'Válido solo para la Detroit Hot Chicken', '/uploads/promo-miercoles.jpg');
-    insert.run(4, 'Todas las pizzas a $7.50', 'Válido en todas las pizzas individuales', '/uploads/promo-jueves.jpg');
+    await insert.run(1, '2 Reinas por $11.99', 'Válido en todas las pizzas individuales', publicUrl('promo-lunes.jpg'));
+    await insert.run(2, '2da pizza a mitad de precio (-50%)', 'Válido en todas las pizzas individuales', publicUrl('promo-martes.jpg'));
+    await insert.run(3, '2 Hot Chicken por $13.99', 'Válido solo para la Detroit Hot Chicken', publicUrl('promo-miercoles.jpg'));
+    await insert.run(4, 'Todas las pizzas a $7.50', 'Válido en todas las pizzas individuales', publicUrl('promo-jueves.jpg'));
   }
 }
 
-seed();
-
-export default db;
+export async function initDb() {
+  await ensureSchema();
+  await seed();
+}

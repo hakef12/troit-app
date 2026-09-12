@@ -2,14 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { requireAuth, requireAdmin } from '../auth.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// En produccion (Render) DATA_DIR apunta al disco persistente; en local queda
-// dentro de server/ como antes.
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', '..');
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+import { uploadFile } from '../supabaseStorage.js';
+import { ah } from '../asyncHandler.js';
 
 const ALLOWED_TYPES = {
   'image/jpeg': '.jpg',
@@ -18,16 +13,8 @@ const ALLOWED_TYPES = {
   'image/gif': '.gif',
 };
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, file, cb) => {
-    const ext = ALLOWED_TYPES[file.mimetype] || path.extname(file.originalname) || '';
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_TYPES[file.mimetype]) {
@@ -39,13 +26,17 @@ const upload = multer({
 
 const router = Router();
 
-router.post('/', requireAuth, requireAdmin, (req, res) => {
+router.post('/', requireAuth, requireAdmin, (req, res, next) => {
   upload.single('image')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' });
-    res.status(201).json({ url: `/uploads/${req.file.filename}` });
+    next();
   });
-});
+}, ah(async (req, res) => {
+  const ext = ALLOWED_TYPES[req.file.mimetype] || path.extname(req.file.originalname) || '';
+  const filename = `${crypto.randomUUID()}${ext}`;
+  const url = await uploadFile(filename, req.file.buffer, req.file.mimetype);
+  res.status(201).json({ url });
+}));
 
 export default router;
-export { UPLOADS_DIR };
