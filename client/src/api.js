@@ -48,6 +48,8 @@ export const api = {
 
   getStoreInfo: () => request('/store-info', { auth: false }),
 
+  getDeliveryEstimate: (lat, lng) => request(`/delivery-estimate?lat=${lat}&lng=${lng}`, { auth: false }),
+
   submitGameScore: (score) => request('/game/score', { method: 'POST', body: { score } }),
 
   getPromos: (all = false) => request(`/promos${all ? '?all=1' : ''}`, { auth: false }),

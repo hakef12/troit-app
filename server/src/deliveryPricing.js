@@ -1,4 +1,7 @@
-// Tabla de tarifas del servicio de delivery (VR-46), por distancia en línea recta
+// Tabla de tarifas del servicio de delivery (VR-46), por distancia real en carretera
+const ORS_API_KEY = process.env.ORS_API_KEY || '';
+const ORS_URL = 'https://api.heigit.org/openrouteservice/v2/directions/driving-car';
+
 const TIERS = [
   { maxKm: 1, fee: 2.5 },
   { maxKm: 2.9, fee: 3.0 },
@@ -30,4 +33,25 @@ export function haversineKm(lat1, lng1, lat2, lng2) {
 export function getDeliveryFee(km) {
   const tier = TIERS.find((t) => km <= t.maxKm);
   return tier ? tier.fee : FEE_BEYOND_MAX;
+}
+
+// Distancia real en carretera (OpenRouteService). Si el servicio falla (fuera de
+// cuota, sin conexion, etc.) cae a la distancia en linea recta como resguardo,
+// para que un pedido nunca se rompa por un problema externo.
+export async function getRoadKm(lat1, lng1, lat2, lng2) {
+  if (!ORS_API_KEY) return haversineKm(lat1, lng1, lat2, lng2);
+  try {
+    const res = await fetch(ORS_URL, {
+      method: 'POST',
+      headers: { Authorization: ORS_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coordinates: [[lng1, lat1], [lng2, lat2]] }),
+    });
+    if (!res.ok) throw new Error(`ORS respondio ${res.status}`);
+    const data = await res.json();
+    const meters = data?.routes?.[0]?.summary?.distance;
+    if (typeof meters !== 'number') throw new Error('Respuesta de ORS sin distancia');
+    return meters / 1000;
+  } catch {
+    return haversineKm(lat1, lng1, lat2, lng2);
+  }
 }

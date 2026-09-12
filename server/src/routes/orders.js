@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db, { transaction } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
-import { haversineKm, getDeliveryFee } from '../deliveryPricing.js';
+import { getDeliveryFee, getRoadKm } from '../deliveryPricing.js';
 import { computePromoDiscount } from '../promoRules.js';
 import { ah } from '../asyncHandler.js';
 
@@ -113,7 +113,7 @@ router.post('/', requireAuth, ah(async (req, res) => {
   const customerLat = deliveryType === 'delivery' && lat != null ? Number(lat) : null;
   const customerLng = deliveryType === 'delivery' && lng != null ? Number(lng) : null;
   if (deliveryType === 'delivery' && customerLat != null && customerLng != null && RESTAURANT_LAT && RESTAURANT_LNG) {
-    deliveryKm = haversineKm(Number(RESTAURANT_LAT), Number(RESTAURANT_LNG), customerLat, customerLng);
+    deliveryKm = await getRoadKm(Number(RESTAURANT_LAT), Number(RESTAURANT_LNG), customerLat, customerLng);
     deliveryFee = getDeliveryFee(deliveryKm);
   }
 

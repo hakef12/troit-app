@@ -6,7 +6,6 @@ import { api, reverseGeocode } from '../api.js';
 import mascot from '../assets/mascot.svg';
 import peaceHands from '../assets/mascot-peace-hands.png';
 import AddressMap from '../components/AddressMap.jsx';
-import { haversineKm, getDeliveryFee } from '../deliveryPricing.js';
 import { computePromoDiscount } from '../promoRules.js';
 import LottieIcon from '../components/LottieIcon.jsx';
 import confettiAnim from '../assets/lottie/confetti.json';
@@ -70,11 +69,27 @@ export default function Checkout() {
       : Math.min(chosenRedemption.discount_value, afterPromoPreview)
     : 0;
 
-  const deliveryKmPreview = useMemo(() => {
-    if (deliveryType !== 'delivery' || !coords || !storeInfo) return null;
-    return haversineKm(storeInfo.lat, storeInfo.lng, coords.lat, coords.lng);
-  }, [deliveryType, coords, storeInfo]);
-  const deliveryFeePreview = deliveryKmPreview != null ? getDeliveryFee(deliveryKmPreview) : 0;
+  const [deliveryEstimate, setDeliveryEstimate] = useState({ km: null, fee: 0 });
+  const [estimatingDelivery, setEstimatingDelivery] = useState(false);
+
+  useEffect(() => {
+    if (deliveryType !== 'delivery' || !coords) {
+      setDeliveryEstimate({ km: null, fee: 0 });
+      return undefined;
+    }
+    setEstimatingDelivery(true);
+    const timeout = setTimeout(() => {
+      api
+        .getDeliveryEstimate(coords.lat, coords.lng)
+        .then((data) => setDeliveryEstimate(data))
+        .catch(() => setDeliveryEstimate({ km: null, fee: 0 }))
+        .finally(() => setEstimatingDelivery(false));
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [deliveryType, coords]);
+
+  const deliveryKmPreview = deliveryEstimate.km;
+  const deliveryFeePreview = deliveryEstimate.fee;
 
   async function handlePickLocation(lat, lng) {
     setCoords({ lat, lng });
@@ -212,7 +227,12 @@ export default function Checkout() {
               <strong>−{formatMoney(discountPreview)}</strong>
             </div>
           )}
-          {deliveryType === 'delivery' && deliveryFeePreview > 0 && (
+          {deliveryType === 'delivery' && estimatingDelivery && (
+            <div className="cart-total-row">
+              <span className="muted small">Calculando envío…</span>
+            </div>
+          )}
+          {deliveryType === 'delivery' && !estimatingDelivery && deliveryFeePreview > 0 && (
             <div className="cart-total-row">
               <span>Envío{deliveryKmPreview != null ? ` (${deliveryKmPreview.toFixed(1)} km)` : ''}</span>
               <strong>{formatMoney(deliveryFeePreview)}</strong>

@@ -13,6 +13,7 @@ import uploadRoutes from './routes/uploads.js';
 import promoRoutes from './routes/promos.js';
 import bannerRoutes from './routes/banners.js';
 import gameRoutes from './routes/game.js';
+import deliveryEstimateRoutes from './routes/deliveryEstimate.js';
 import { initDb } from './db.js';
 import { ensureBucket, uploadFile } from './supabaseStorage.js';
 
@@ -47,6 +48,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/promos', promoRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/delivery-estimate', deliveryEstimateRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
