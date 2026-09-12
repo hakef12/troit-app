@@ -1035,7 +1035,7 @@ h2 {
 .runner-canvas-wrap {
   position: relative;
   width: 100%;
-  max-width: 600px;
+  max-width: 760px;
   border: 2px solid var(--red);
   border-radius: 10px;
   overflow: hidden;

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import mascotImg from '../assets/mascot-sticker.png';
 
-const WIDTH = 600;
-const HEIGHT = 260;
-const GROUND_Y = HEIGHT - 30;
-const GRAVITY = 0.9;
-const JUMP_VELOCITY = -13;
-const PLAYER_SIZE = 48;
-const PLAYER_X = 50;
+const WIDTH = 760;
+const HEIGHT = 320;
+const GROUND_Y = HEIGHT - 36;
+const GRAVITY = 1.05;
+const JUMP_VELOCITY = -16;
+const PLAYER_SIZE = 60;
+const PLAYER_X = 60;
 const OBSTACLE_EMOJIS = ['🥤', '📦', '🍾'];
 const HIGH_SCORE_KEY = 'troit-runner-highscore';
 
@@ -94,7 +94,7 @@ export default function TroitRunnerGame() {
       if (s.spawnTimer >= s.nextSpawnIn) {
         s.spawnTimer = 0;
         s.nextSpawnIn = 55 + Math.floor(Math.random() * 50);
-        const size = 30 + Math.floor(Math.random() * 12);
+        const size = 38 + Math.floor(Math.random() * 15);
         s.obstacles.push({
           x: WIDTH,
           size,
@@ -149,16 +149,16 @@ export default function TroitRunnerGame() {
         ctx.drawImage(imgRef.current, PLAYER_X, s.playerY, PLAYER_SIZE, PLAYER_SIZE);
       }
 
-      ctx.font = '28px sans-serif';
       ctx.textBaseline = 'alphabetic';
       s.obstacles.forEach((o) => {
+        ctx.font = `${o.size}px sans-serif`;
         ctx.fillText(o.emoji, o.x, GROUND_Y + 2);
       });
 
       ctx.fillStyle = '#111';
-      ctx.font = 'bold 16px sans-serif';
+      ctx.font = 'bold 20px sans-serif';
       const score = Math.floor(s.distance / 10);
-      ctx.fillText(`Puntaje: ${score}`, WIDTH - 150, 24);
+      ctx.fillText(`Puntaje: ${score}`, WIDTH - 190, 30);
 
       rafId = requestAnimationFrame(tick);
     }
