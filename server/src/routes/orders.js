@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db, { transaction } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
 import { haversineKm, getDeliveryFee } from '../deliveryPricing.js';
+import { computePromoDiscount } from '../promoRules.js';
 import { ah } from '../asyncHandler.js';
 
 const router = Router();
@@ -40,7 +41,8 @@ function buildWhatsappMessage({ order, items, user }) {
   }
   lines.push('');
   lines.push(`Subtotal: ${formatMoney(order.subtotal)}`);
-  if (order.discount > 0) lines.push(`Descuento: -${formatMoney(order.discount)}`);
+  if (order.promo_discount > 0) lines.push(`Promo del día (${order.promo_title}): -${formatMoney(order.promo_discount)}`);
+  if (order.discount > 0) lines.push(`Descuento cupón: -${formatMoney(order.discount)}`);
   if (order.delivery_fee > 0) {
     const kmText = order.delivery_km != null ? ` (${order.delivery_km.toFixed(1)} km)` : '';
     lines.push(`Envío${kmText}: ${formatMoney(order.delivery_fee)}`);
@@ -76,11 +78,17 @@ router.post('/', requireAuth, ah(async (req, res) => {
     const product = await db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(it.product_id);
     if (!product) return res.status(400).json({ error: `Producto ${it.product_id} no disponible` });
     const qty = Math.max(1, Number(it.qty) || 1);
-    resolvedItems.push({ id: product.id, name: product.name, price: product.price, qty });
+    resolvedItems.push({ id: product.id, name: product.name, price: product.price, qty, category: product.category });
     subtotal += product.price * qty;
   }
 
-  // Aplicar cupón canjeado, si corresponde
+  // Promo del día (según la fecha del servidor, nunca la del cliente): se aplica sola
+  // si el carrito cumple la condición de esa promo — no hace falta código ni cupón.
+  const todayPromo = await db.prepare('SELECT * FROM promos WHERE day_of_week = ? AND active = 1').get(new Date().getDay());
+  const promoDiscount = Math.round(computePromoDiscount(todayPromo, resolvedItems) * 100) / 100;
+  const afterPromo = Math.max(0, subtotal - promoDiscount);
+
+  // Aplicar cupón canjeado, si corresponde (sobre lo que queda después de la promo)
   let discount = 0;
   let redemption = null;
   if (redemption_id) {
@@ -92,11 +100,11 @@ router.post('/', requireAuth, ah(async (req, res) => {
       .get(redemption_id, req.userId);
     if (!redemption) return res.status(400).json({ error: 'El cupón seleccionado no está disponible' });
     discount = redemption.discount_type === 'percentage'
-      ? Math.round(subtotal * redemption.discount_value) / 100
-      : Math.min(redemption.discount_value, subtotal);
+      ? Math.round(afterPromo * redemption.discount_value) / 100
+      : Math.min(redemption.discount_value, afterPromo);
   }
 
-  const foodTotal = Math.max(0, subtotal - discount);
+  const foodTotal = Math.max(0, afterPromo - discount);
   const pointsEarned = Math.floor(foodTotal / POINTS_PER_UNIT);
 
   // Calcular el costo de envío según distancia al local (tarifario del delivery)
@@ -114,8 +122,8 @@ router.post('/', requireAuth, ah(async (req, res) => {
   const orderId = await transaction(async () => {
     const info = await db
       .prepare(
-        `INSERT INTO orders (user_id, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO orders (user_id, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km, promo_id, promo_title, promo_discount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         req.userId,
@@ -131,7 +139,10 @@ router.post('/', requireAuth, ah(async (req, res) => {
         customerLat,
         customerLng,
         deliveryFee,
-        deliveryKm
+        deliveryKm,
+        promoDiscount > 0 ? todayPromo.id : null,
+        promoDiscount > 0 ? todayPromo.title : null,
+        promoDiscount
       );
     await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
     if (redemption) {

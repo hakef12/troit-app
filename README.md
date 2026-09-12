@@ -103,7 +103,15 @@ El mapa usa [Leaflet](https://leafletjs.com/) con mapas de [OpenStreetMap](https
 
 Cada promo tiene un título, una imagen (el flyer) y una condición/descripción (ej. "Válido solo para la Detroit Hot Chicken"). Esa condición **siempre se muestra como una franja debajo del flyer** en el menú, sin importar si la imagen ya la menciona o no — así el cliente siempre ve las reglas con claridad, aunque el diseño de la imagen no las incluya.
 
-Importante: las promos son **informativas**, no se aplican solas al precio del pedido. El cliente arma su pedido normal y, si corresponde a la promo del día, lo menciona al confirmar por WhatsApp — ahí el restaurante ajusta el precio manualmente antes de cobrar. Esto es así porque cada promo de tu tarifario tiene una mecánica distinta (2x1, 2da unidad a mitad de precio, categoría entera a precio fijo, etc.) y automatizar cada una requeriría un motor de reglas a medida. Si en el futuro quieres que se calculen solas, contame cómo funciona cada una en detalle y lo armamos.
+**El descuento de la promo del día se aplica solo, automáticamente**, si el carrito cumple la condición — el cliente no tiene que hacer nada especial ni pedirlo por WhatsApp. El servidor mira el día de hoy (nunca confía en la fecha del navegador) y calcula el descuento según la regla de esa promo:
+
+- **Lunes** (2 Reinas por $11.99) y **Miércoles** (2 Hot Chicken por $13.99): se descuenta automáticamente cada vez que el carrito tiene 2 (o 4, o 6...) unidades de esa pizza puntual.
+- **Martes** (2da pizza al 50%): junta todas las pizzas individuales del carrito y aplica 50% de descuento a la más barata de cada par.
+- **Jueves** (todas las pizzas a $7.50): cualquier pizza individual que cueste más de $7.50 baja a ese precio, sin importar cuántas pida.
+
+El checkout muestra el descuento en la vista previa del carrito antes de confirmar, y el pedido final (tanto en la pantalla de confirmación como en el mensaje de WhatsApp y el panel de admin) siempre indica qué promo se aplicó y cuánto se descontó. Los puntos ganados se calculan sobre el total ya con el descuento de la promo aplicado.
+
+Estas reglas viven en `server/src/promoRules.js` (y su espejo en `client/src/promoRules.js`, solo para la vista previa) — si agregás una promo nueva con una mecánica distinta a las de arriba, avisame y le sumamos el tipo de regla correspondiente.
 
 ## Costo de envío
 

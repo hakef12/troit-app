@@ -133,7 +133,10 @@ async function ensureSchema() {
       lat REAL,
       lng REAL,
       delivery_fee REAL NOT NULL DEFAULT 0,
-      delivery_km REAL
+      delivery_km REAL,
+      promo_id INTEGER,
+      promo_title TEXT,
+      promo_discount REAL NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS promos (
@@ -143,7 +146,12 @@ async function ensureSchema() {
       description TEXT,
       image_url TEXT,
       active INTEGER NOT NULL DEFAULT 1,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      rule_type TEXT,
+      rule_category TEXT,
+      rule_product_id INTEGER,
+      rule_quantity INTEGER,
+      rule_price REAL
     );
 
     CREATE TABLE IF NOT EXISTS banners (
@@ -155,6 +163,46 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  // Columnas agregadas despues del primer despliegue en Supabase (no rompen bases ya creadas)
+  await exec(`
+    ALTER TABLE promos ADD COLUMN IF NOT EXISTS rule_type TEXT;
+    ALTER TABLE promos ADD COLUMN IF NOT EXISTS rule_category TEXT;
+    ALTER TABLE promos ADD COLUMN IF NOT EXISTS rule_product_id INTEGER;
+    ALTER TABLE promos ADD COLUMN IF NOT EXISTS rule_quantity INTEGER;
+    ALTER TABLE promos ADD COLUMN IF NOT EXISTS rule_price REAL;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_id INTEGER;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_title TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_discount REAL NOT NULL DEFAULT 0;
+  `);
+}
+
+// Le asigna la regla automatica a cada promo semanal real, buscando el producto
+// por nombre (no por id, para no depender del orden de insercion del seed).
+// Solo completa promos que todavia no tengan rule_type (no pisa nada editado a mano).
+async function backfillPromoRules() {
+  async function productId(name) {
+    const row = await prepare('SELECT id FROM products WHERE name = ?').get(name);
+    return row?.id ?? null;
+  }
+
+  const reinaId = await productId('La Reina Detroit');
+  const hotChickenId = await productId('Detroit Hot Chicken');
+
+  const rules = [
+    { day: 1, rule_type: 'bundle_price', rule_category: null, rule_product_id: reinaId, rule_quantity: 2, rule_price: 11.99 },
+    { day: 2, rule_type: 'category_half_second', rule_category: 'Pizzas', rule_product_id: null, rule_quantity: null, rule_price: null },
+    { day: 3, rule_type: 'bundle_price', rule_category: null, rule_product_id: hotChickenId, rule_quantity: 2, rule_price: 13.99 },
+    { day: 4, rule_type: 'category_fixed_price', rule_category: 'Pizzas', rule_product_id: null, rule_quantity: null, rule_price: 7.5 },
+  ];
+
+  for (const r of rules) {
+    if (!r.rule_product_id && (r.rule_type === 'bundle_price')) continue; // producto no encontrado, no forzar regla rota
+    await prepare(
+      `UPDATE promos SET rule_type = ?, rule_category = ?, rule_product_id = ?, rule_quantity = ?, rule_price = ?
+       WHERE day_of_week = ? AND rule_type IS NULL`
+    ).run(r.rule_type, r.rule_category, r.rule_product_id, r.rule_quantity, r.rule_price, r.day);
+  }
 }
 
 async function seed() {
@@ -227,4 +275,5 @@ async function seed() {
 export async function initDb() {
   await ensureSchema();
   await seed();
+  await backfillPromoRules();
 }

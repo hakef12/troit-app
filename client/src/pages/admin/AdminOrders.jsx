@@ -46,6 +46,11 @@ export default function AdminOrders() {
                   Envío{o.delivery_km != null ? ` (${Number(o.delivery_km).toFixed(1)} km)` : ''}: {formatMoney(o.delivery_fee)}
                 </div>
               )}
+              {o.promo_discount > 0 && (
+                <div className="muted small">
+                  🔥 Promo aplicada ({o.promo_title}): −{formatMoney(o.promo_discount)}
+                </div>
+              )}
             </div>
             <span>{o.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo'}</span>
             <strong>{formatMoney(o.total)}</strong>

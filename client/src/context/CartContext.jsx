@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, useCallback } from 'react
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState([]); // { id, name, price, qty }
+  const [items, setItems] = useState([]); // { id, name, price, qty, category }
 
   const addItem = useCallback((product) => {
     setItems((prev) => {
@@ -11,7 +11,7 @@ export function CartProvider({ children }) {
       if (existing) {
         return prev.map((it) => (it.id === product.id ? { ...it, qty: it.qty + 1 } : it));
       }
-      return [...prev, { id: product.id, name: product.name, price: product.price, qty: 1 }];
+      return [...prev, { id: product.id, name: product.name, price: product.price, category: product.category, qty: 1 }];
     });
   }, []);
 

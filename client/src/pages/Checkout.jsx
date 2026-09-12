@@ -7,6 +7,7 @@ import mascot from '../assets/mascot.svg';
 import peaceHands from '../assets/mascot-peace-hands.png';
 import AddressMap from '../components/AddressMap.jsx';
 import { haversineKm, getDeliveryFee } from '../deliveryPricing.js';
+import { computePromoDiscount } from '../promoRules.js';
 import LottieIcon from '../components/LottieIcon.jsx';
 import confettiAnim from '../assets/lottie/confetti.json';
 import successCheckAnim from '../assets/lottie/success-check.json';
@@ -32,6 +33,7 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [redemptions, setRedemptions] = useState([]);
   const [selectedRedemption, setSelectedRedemption] = useState('');
+  const [promos, setPromos] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -42,6 +44,14 @@ export default function Checkout() {
       setAddress(user.address || '');
     }
   }, [user]);
+
+  useEffect(() => {
+    api.getPromos().then((data) => setPromos(data.promos)).catch(() => {});
+  }, []);
+
+  const todayPromo = useMemo(() => promos.find((p) => p.day_of_week === new Date().getDay()), [promos]);
+  const promoDiscountPreview = useMemo(() => computePromoDiscount(todayPromo, items), [todayPromo, items]);
+  const afterPromoPreview = Math.max(0, total - promoDiscountPreview);
 
   useEffect(() => {
     api
@@ -56,8 +66,8 @@ export default function Checkout() {
   const chosenRedemption = redemptions.find((r) => String(r.id) === String(selectedRedemption));
   const discountPreview = chosenRedemption
     ? chosenRedemption.discount_type === 'percentage'
-      ? Math.round(total * chosenRedemption.discount_value) / 100
-      : Math.min(chosenRedemption.discount_value, total)
+      ? Math.round(afterPromoPreview * chosenRedemption.discount_value) / 100
+      : Math.min(chosenRedemption.discount_value, afterPromoPreview)
     : 0;
 
   const deliveryKmPreview = useMemo(() => {
@@ -129,6 +139,11 @@ export default function Checkout() {
             Tu pedido <strong>#{result.order.id}</strong> fue registrado. Se abrió WhatsApp con el detalle para que lo confirmes
             enviando el mensaje.
           </p>
+          {result.order.promo_discount > 0 && (
+            <p>
+              Promo del día aplicada ({result.order.promo_title}): <strong>−{formatMoney(result.order.promo_discount)}</strong>
+            </p>
+          )}
           {result.order.delivery_fee > 0 && (
             <p>
               Costo de envío
@@ -185,6 +200,12 @@ export default function Checkout() {
             <span>Subtotal</span>
             <strong>{formatMoney(total)}</strong>
           </div>
+          {promoDiscountPreview > 0 && (
+            <div className="cart-total-row discount">
+              <span>Promo del día ({todayPromo.title})</span>
+              <strong>−{formatMoney(promoDiscountPreview)}</strong>
+            </div>
+          )}
           {chosenRedemption && (
             <div className="cart-total-row discount">
               <span>Descuento ({chosenRedemption.title})</span>
@@ -199,7 +220,11 @@ export default function Checkout() {
           )}
           <div className="cart-total-row final">
             <span>Total</span>
-            <strong>{formatMoney(total - discountPreview + (deliveryType === 'delivery' ? deliveryFeePreview : 0))}</strong>
+            <strong>
+              {formatMoney(
+                afterPromoPreview - discountPreview + (deliveryType === 'delivery' ? deliveryFeePreview : 0)
+              )}
+            </strong>
           </div>
         </div>
       )}
