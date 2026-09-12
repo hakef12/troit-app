@@ -48,6 +48,8 @@ export const api = {
 
   getStoreInfo: () => request('/store-info', { auth: false }),
 
+  submitGameScore: (score) => request('/game/score', { method: 'POST', body: { score } }),
+
   getPromos: (all = false) => request(`/promos${all ? '?all=1' : ''}`, { auth: false }),
   createPromo: (payload) => request('/promos', { method: 'POST', body: payload }),
   updatePromo: (id, payload) => request(`/promos/${id}`, { method: 'PUT', body: payload }),

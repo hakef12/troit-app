@@ -12,6 +12,7 @@ import storeRoutes from './routes/store.js';
 import uploadRoutes, { UPLOADS_DIR } from './routes/uploads.js';
 import promoRoutes from './routes/promos.js';
 import bannerRoutes from './routes/banners.js';
+import gameRoutes from './routes/game.js';
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -43,6 +44,7 @@ app.use('/api/store-info', storeRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/promos', promoRoutes);
 app.use('/api/banners', bannerRoutes);
+app.use('/api/game', gameRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

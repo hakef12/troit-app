@@ -121,6 +121,8 @@ ensureColumn('orders', 'lng', 'REAL');
 ensureColumn('orders', 'delivery_fee', 'REAL NOT NULL DEFAULT 0');
 ensureColumn('orders', 'delivery_km', 'REAL');
 ensureColumn('users', 'google_id', 'TEXT');
+ensureColumn('users', 'game_points_today', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'game_points_date', 'TEXT');
 
 function seed() {
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mascotImg from '../assets/mascot-sticker.png';
+import { api } from '../api.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const WIDTH = 760;
 const HEIGHT = 320;
@@ -10,13 +12,16 @@ const PLAYER_SIZE = 60;
 const PLAYER_X = 60;
 const OBSTACLE_EMOJIS = ['🥤', '📦', '🍾'];
 const HIGH_SCORE_KEY = 'troit-runner-highscore';
+const POINTS_PER_SCORE = 2000;
 
 export default function TroitRunnerGame() {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const [phase, setPhase] = useState('idle'); // idle | playing | gameover
   const [imgReady, setImgReady] = useState(false);
+  const [awardInfo, setAwardInfo] = useState(null);
   const stateRef = useRef(null);
+  const { user, refresh } = useAuth();
 
   useEffect(() => {
     const img = new Image();
@@ -48,6 +53,7 @@ export default function TroitRunnerGame() {
 
   function startGame() {
     resetState();
+    setAwardInfo(null);
     setPhase('playing');
   }
 
@@ -131,6 +137,15 @@ export default function TroitRunnerGame() {
         const best = Number(localStorage.getItem(HIGH_SCORE_KEY) || 0);
         if (score > best) localStorage.setItem(HIGH_SCORE_KEY, String(score));
         setPhase('gameover');
+        if (user) {
+          api
+            .submitGameScore(score)
+            .then((res) => {
+              setAwardInfo(res);
+              if (res.awarded > 0) refresh();
+            })
+            .catch(() => {});
+        }
         return;
       }
 
@@ -176,11 +191,29 @@ export default function TroitRunnerGame() {
         <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} className="runner-canvas" />
         {phase !== 'playing' && (
           <div className="runner-overlay">
-            {phase === 'idle' && imgReady && <p>Tocá o presioná espacio para jugar</p>}
+            {phase === 'idle' && imgReady && (
+              <>
+                <p>Tocá o presioná espacio para jugar</p>
+                <p className="muted small">Cada {POINTS_PER_SCORE} puntos de juego = 1 punto de fidelización</p>
+              </>
+            )}
             {phase === 'gameover' && (
               <>
                 <p>¡Chocaste! Puntaje: {lastScore}</p>
                 <p className="muted small">Mejor puntaje: {bestScore}</p>
+                {user ? (
+                  awardInfo && (
+                    <p className="muted small">
+                      {awardInfo.awarded > 0
+                        ? `¡Ganaste ${awardInfo.awarded} punto${awardInfo.awarded === 1 ? '' : 's'} de fidelización!`
+                        : awardInfo.dailyCapReached
+                        ? 'Ya alcanzaste el máximo de puntos por juego de hoy'
+                        : `Necesitás ${POINTS_PER_SCORE} puntos de juego para ganar 1 punto`}
+                    </p>
+                  )
+                ) : (
+                  <p className="muted small">Inicia sesión para ganar puntos jugando</p>
+                )}
                 <p>Tocá para volver a intentar</p>
               </>
             )}
