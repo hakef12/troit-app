@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import TroitRunnerGame from '../components/TroitRunnerGame.jsx';
 
 export default function Coupons() {
   const [coupons, setCoupons] = useState([]);
@@ -63,6 +64,10 @@ export default function Coupons() {
           </div>
         ))}
       </div>
+
+      <h2>🎮 Jugá con Troit</h2>
+      <p className="muted small">Saltá los obstáculos con espacio (o tocando la pantalla).</p>
+      <TroitRunnerGame />
 
       {user && available.length > 0 && (
         <>
