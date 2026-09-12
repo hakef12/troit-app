@@ -175,7 +175,25 @@ router.put('/:id/status', requireAuth, requireAdmin, (req, res) => {
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado inválido' });
   const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
-  db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
+
+  transaction(() => {
+    // Al cancelar un pedido, se revierten los puntos que había ganado y se
+    // libera el cupón canjeado (si usó uno) para que pueda volver a usarlo.
+    // Al destantar la cancelación, se vuelven a aplicar ambos efectos.
+    if (status === 'cancelado' && existing.status !== 'cancelado') {
+      db.prepare('UPDATE users SET points = MAX(points - ?, 0) WHERE id = ?').run(existing.points_earned, existing.user_id);
+      if (existing.redemption_id) {
+        db.prepare('UPDATE redemptions SET used = 0, order_id = NULL WHERE id = ?').run(existing.redemption_id);
+      }
+    } else if (status !== 'cancelado' && existing.status === 'cancelado') {
+      db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(existing.points_earned, existing.user_id);
+      if (existing.redemption_id) {
+        db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(existing.id, existing.redemption_id);
+      }
+    }
+    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, req.params.id);
+  });
+
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   res.json({ order: { ...order, items: JSON.parse(order.items_json) } });
 });
