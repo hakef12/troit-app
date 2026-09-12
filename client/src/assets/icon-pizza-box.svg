@@ -1,0 +1,36 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fondo circular -->
+  <circle cx="50" cy="50" r="48" fill="#FCEEC9"/>
+  <circle cx="50" cy="50" r="43" fill="#D62828"/>
+
+  <!-- Destello decorativo -->
+  <path d="M19 30 L21.5 23 L24 30 L31 32.5 L24 35 L21.5 42 L19 35 L12 32.5 Z" fill="#FCEEC9"/>
+
+  <!-- Tapa de la caja abierta -->
+  <path d="M42 38 L76 20 L76 44 L42 58 Z" fill="#FCEEC9" stroke="#205F3A" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Mascota parada sobre la tapa -->
+  <g transform="translate(52, 20) rotate(-14) scale(1.3)">
+    <ellipse cx="0" cy="0" rx="9" ry="6.4" fill="#FCEEC9" stroke="#205F3A" stroke-width="2.4"/>
+    <circle cx="-3.6" cy="-0.6" r="2.5" fill="#FCEEC9" stroke="#205F3A" stroke-width="2"/>
+    <circle cx="3.6" cy="-0.6" r="2.5" fill="#FCEEC9" stroke="#205F3A" stroke-width="2"/>
+    <circle cx="-3.6" cy="-0.6" r="0.9" fill="#205F3A"/>
+    <circle cx="3.6" cy="-0.6" r="0.9" fill="#205F3A"/>
+    <!-- manos en V -->
+    <path d="M-9.5 -1 L-13 -7 M-9.5 -1 L-14 -2.5" stroke="#205F3A" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M9.5 -1 L13 -7 M9.5 -1 L14 -2.5" stroke="#205F3A" stroke-width="2.4" stroke-linecap="round"/>
+    <!-- pies -->
+    <ellipse cx="-3.6" cy="7.6" rx="3.4" ry="2.2" fill="#FCA934" stroke="#205F3A" stroke-width="1.8"/>
+    <ellipse cx="3.6" cy="7.6" rx="3.4" ry="2.2" fill="#FCA934" stroke="#205F3A" stroke-width="1.8"/>
+  </g>
+
+  <!-- Cuerpo de la caja abierta -->
+  <path d="M16 58 L42 45 L76 58 L76 80 L42 93 L16 80 Z" fill="#FCEEC9" stroke="#205F3A" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Pizza dentro de la caja -->
+  <path d="M23 60 L42 51 L69 60 L69 76 L42 85 L23 76 Z" fill="#7A3B1E"/>
+  <path d="M26.5 61.5 L42 55 L65 61.5 L65 74 L42 80 L26.5 74 Z" fill="#E23B3B"/>
+  <ellipse cx="35" cy="63.5" rx="3.4" ry="2.1" fill="#4F8A3D"/>
+  <ellipse cx="51" cy="60" rx="3.4" ry="2.1" fill="#4F8A3D"/>
+  <ellipse cx="45" cy="72" rx="3.4" ry="2.1" fill="#4F8A3D"/>
+</svg>
