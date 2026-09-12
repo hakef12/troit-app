@@ -16,6 +16,12 @@ export async function ensureBucket() {
   }
 }
 
+export async function listFilenames() {
+  const { data, error } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
+  if (error) throw error;
+  return new Set((data || []).map((f) => f.name));
+}
+
 export function publicUrl(filename) {
   return supabase.storage.from(BUCKET).getPublicUrl(filename).data.publicUrl;
 }

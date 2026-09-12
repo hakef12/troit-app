@@ -15,17 +15,21 @@ import bannerRoutes from './routes/banners.js';
 import gameRoutes from './routes/game.js';
 import deliveryEstimateRoutes from './routes/deliveryEstimate.js';
 import { initDb } from './db.js';
-import { ensureBucket, uploadFile } from './supabaseStorage.js';
+import { ensureBucket, uploadFile, listFilenames } from './supabaseStorage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Imagenes semilla del repo (promos, fotos reales) que suben a Supabase Storage
-// en cada arranque (upsert, no pisa nada distinto y no hace falta disco persistente).
+// solo una vez: en cada arranque nos fijamos que ya esten y saltamos las que
+// faltan, para no repetir ~40 subidas (y frenar el arranque) cada vez que el
+// servidor gratis de Render se reinicia por inactividad.
 async function seedUploadAssets() {
   const seedDir = path.join(__dirname, '..', 'uploads');
   if (!fs.existsSync(seedDir)) return;
   const mimeByExt = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+  const existing = await listFilenames();
   for (const file of fs.readdirSync(seedDir)) {
+    if (existing.has(file)) continue;
     const ext = path.extname(file).toLowerCase();
     if (!mimeByExt[ext]) continue;
     const buffer = fs.readFileSync(path.join(seedDir, file));
