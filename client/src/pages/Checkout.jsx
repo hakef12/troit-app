@@ -27,6 +27,8 @@ export default function Checkout() {
 
   const [deliveryType, setDeliveryType] = useState('delivery');
   const [address, setAddress] = useState(user?.address || '');
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [coords, setCoords] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
@@ -107,6 +109,14 @@ export default function Checkout() {
       setError('Tu carrito está vacío');
       return;
     }
+    if (!user && !guestName.trim()) {
+      setError('Ingresa tu nombre para continuar sin cuenta');
+      return;
+    }
+    if (!user && !guestPhone.trim()) {
+      setError('Ingresa tu teléfono para continuar sin cuenta');
+      return;
+    }
     setLoading(true);
     try {
       const data = await api.createOrder({
@@ -116,7 +126,9 @@ export default function Checkout() {
         lat: deliveryType === 'delivery' ? coords?.lat : undefined,
         lng: deliveryType === 'delivery' ? coords?.lng : undefined,
         payment_method: paymentMethod,
-        redemption_id: selectedRedemption || undefined,
+        redemption_id: user ? selectedRedemption || undefined : undefined,
+        guest_name: user ? undefined : guestName.trim(),
+        guest_phone: user ? undefined : guestPhone.trim(),
       });
       setResult(data);
       clear();
@@ -127,17 +139,6 @@ export default function Checkout() {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (!user) {
-    return (
-      <div className="page narrow">
-        <h1>Carrito</h1>
-        <p>
-          Inicia sesión para completar tu pedido. <Link to="/login" state={{ from: '/checkout' }}>Ingresar</Link>
-        </p>
-      </div>
-    );
   }
 
   if (result) {
@@ -169,9 +170,16 @@ export default function Checkout() {
           <p>
             Total pagado: <strong>{formatMoney(result.order.total)}</strong>
           </p>
-          <p>
-            Ganaste <strong>{result.order.points_earned} puntos</strong>. Ahora tienes <strong>{result.points} puntos</strong>.
-          </p>
+          {result.points != null ? (
+            <p>
+              Ganaste <strong>{result.order.points_earned} puntos</strong>. Ahora tienes <strong>{result.points} puntos</strong>.
+            </p>
+          ) : (
+            <p className="muted small">
+              Este pedido no sumó puntos por ser sin cuenta. <Link to="/register">Regístrate</Link> para ganar puntos en tu
+              próximo pedido.
+            </p>
+          )}
           <a className="btn" href={result.whatsappUrl} target="_blank" rel="noopener noreferrer">
             Abrir WhatsApp de nuevo
           </a>
@@ -246,6 +254,24 @@ export default function Checkout() {
               )}
             </strong>
           </div>
+        </div>
+      )}
+
+      {!user && (
+        <div className="card form">
+          <p className="muted small">
+            Estás pidiendo sin cuenta — no vas a ganar puntos ni podés usar cupones en este pedido.{' '}
+            <Link to="/login" state={{ from: '/checkout' }}>Inicia sesión</Link> o{' '}
+            <Link to="/register" state={{ from: '/checkout' }}>regístrate</Link> si querés acumularlos.
+          </p>
+          <label>
+            Tu nombre
+            <input value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Nombre y apellido" />
+          </label>
+          <label>
+            Tu teléfono
+            <input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="Ej: 0985206063" />
+          </label>
         </div>
       )}
 

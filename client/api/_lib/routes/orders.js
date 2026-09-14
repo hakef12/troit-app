@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db, { transaction } from '../db.js';
-import { requireAuth, requireAdmin } from '../auth.js';
+import { requireAuth, requireAdmin, optionalAuth } from '../auth.js';
 import { getDeliveryFee, getRoadKm } from '../deliveryPricing.js';
 import { computePromoDiscount } from '../promoRules.js';
 import { ah } from '../asyncHandler.js';
@@ -20,11 +20,11 @@ function mapsLink(lat, lng) {
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
-function buildWhatsappMessage({ order, items, user }) {
+function buildWhatsappMessage({ order, items, customerName }) {
   const lines = [];
   lines.push(`*Nuevo pedido #${order.id}*`);
   lines.push('');
-  lines.push(`Cliente: ${user.name}`);
+  lines.push(`Cliente: ${customerName}${order.guest_phone ? ` (${order.guest_phone})` : ''}`);
   if (order.delivery_type === 'pickup') {
     lines.push('Entrega: Retiro en el local');
     lines.push(`Local: ${RESTAURANT_ADDRESS}`);
@@ -50,14 +50,15 @@ function buildWhatsappMessage({ order, items, user }) {
   lines.push(`*Total: ${formatMoney(order.total)}*`);
   lines.push('');
   lines.push(`Método de pago: ${order.payment_method === 'transferencia' ? 'Transferencia bancaria' : 'Efectivo'}`);
-  lines.push(`Puntos ganados con este pedido: ${order.points_earned}`);
+  lines.push(order.user_id ? `Puntos ganados con este pedido: ${order.points_earned}` : 'Pedido sin cuenta (no acumula puntos)');
   return lines.join('\n');
 }
 
-router.post('/', requireAuth, ah(async (req, res) => {
-  const { items, address, payment_method, redemption_id, delivery_type, lat, lng } = req.body || {};
+router.post('/', optionalAuth, ah(async (req, res) => {
+  const { items, address, payment_method, redemption_id, delivery_type, lat, lng, guest_name, guest_phone } = req.body || {};
 
   const deliveryType = delivery_type === 'pickup' ? 'pickup' : 'delivery';
+  const isGuest = !req.userId;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'El pedido debe tener al menos un producto' });
@@ -68,8 +69,19 @@ router.post('/', requireAuth, ah(async (req, res) => {
   if (!['efectivo', 'transferencia'].includes(payment_method)) {
     return res.status(400).json({ error: 'Método de pago inválido (debe ser efectivo o transferencia)' });
   }
+  if (isGuest && (!guest_name || !guest_name.trim())) {
+    return res.status(400).json({ error: 'El nombre es obligatorio para pedir sin cuenta' });
+  }
+  if (isGuest && (!guest_phone || !guest_phone.trim())) {
+    return res.status(400).json({ error: 'El teléfono es obligatorio para pedir sin cuenta' });
+  }
+  // Los invitados no tienen puntos propios: no pueden canjear cupones (esos se
+  // pagan con puntos acumulados, que solo existen para cuentas registradas).
+  if (isGuest && redemption_id) {
+    return res.status(400).json({ error: 'Necesitás iniciar sesión para usar un cupón' });
+  }
 
-  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+  const user = isGuest ? null : await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
 
   // Resolver productos y precios desde la base de datos (nunca confiar en el precio del cliente)
   const resolvedItems = [];
@@ -105,7 +117,8 @@ router.post('/', requireAuth, ah(async (req, res) => {
   }
 
   const foodTotal = Math.max(0, afterPromo - discount);
-  const pointsEarned = Math.floor(foodTotal / POINTS_PER_UNIT);
+  // Sin cuenta no hay dónde acumular puntos.
+  const pointsEarned = isGuest ? 0 : Math.floor(foodTotal / POINTS_PER_UNIT);
 
   // Calcular el costo de envío según distancia al local (tarifario del delivery)
   let deliveryFee = 0;
@@ -122,11 +135,13 @@ router.post('/', requireAuth, ah(async (req, res) => {
   const orderId = await transaction(async () => {
     const info = await db
       .prepare(
-        `INSERT INTO orders (user_id, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km, promo_id, promo_title, promo_discount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO orders (user_id, guest_name, guest_phone, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km, promo_id, promo_title, promo_discount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         req.userId,
+        isGuest ? guest_name.trim() : null,
+        isGuest ? guest_phone.trim() : null,
         JSON.stringify(resolvedItems),
         subtotal,
         discount,
@@ -144,7 +159,9 @@ router.post('/', requireAuth, ah(async (req, res) => {
         promoDiscount > 0 ? todayPromo.title : null,
         promoDiscount
       );
-    await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
+    if (!isGuest) {
+      await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
+    }
     if (redemption) {
       await db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(info.lastInsertRowid, redemption.id);
     }
@@ -152,14 +169,18 @@ router.post('/', requireAuth, ah(async (req, res) => {
   });
 
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-  const updatedUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+  const updatedUser = isGuest ? null : await db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
 
-  const message = buildWhatsappMessage({ order, items: resolvedItems, user: updatedUser });
+  const message = buildWhatsappMessage({
+    order,
+    items: resolvedItems,
+    customerName: isGuest ? guest_name.trim() : updatedUser.name,
+  });
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
   res.status(201).json({
     order,
-    points: updatedUser.points,
+    points: isGuest ? null : updatedUser.points,
     whatsappUrl,
     whatsappMessage: message,
   });
@@ -173,8 +194,8 @@ router.get('/mine', requireAuth, ah(async (req, res) => {
 router.get('/', requireAuth, requireAdmin, ah(async (req, res) => {
   const rows = await db
     .prepare(
-      `SELECT o.*, u.name AS customer_name, u.phone AS customer_phone FROM orders o
-       JOIN users u ON u.id = o.user_id ORDER BY o.created_at DESC`
+      `SELECT o.*, COALESCE(u.name, o.guest_name) AS customer_name, COALESCE(u.phone, o.guest_phone) AS customer_phone FROM orders o
+       LEFT JOIN users u ON u.id = o.user_id ORDER BY o.created_at DESC`
     )
     .all();
   res.json({ orders: rows.map((o) => ({ ...o, items: JSON.parse(o.items_json) })) });
@@ -192,12 +213,16 @@ router.put('/:id/status', requireAuth, requireAdmin, ah(async (req, res) => {
     // libera el cupón canjeado (si usó uno) para que pueda volver a usarlo.
     // Al destantar la cancelación, se vuelven a aplicar ambos efectos.
     if (status === 'cancelado' && existing.status !== 'cancelado') {
-      await db.prepare('UPDATE users SET points = GREATEST(points - ?, 0) WHERE id = ?').run(existing.points_earned, existing.user_id);
+      if (existing.user_id) {
+        await db.prepare('UPDATE users SET points = GREATEST(points - ?, 0) WHERE id = ?').run(existing.points_earned, existing.user_id);
+      }
       if (existing.redemption_id) {
         await db.prepare('UPDATE redemptions SET used = 0, order_id = NULL WHERE id = ?').run(existing.redemption_id);
       }
     } else if (status !== 'cancelado' && existing.status === 'cancelado') {
-      await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(existing.points_earned, existing.user_id);
+      if (existing.user_id) {
+        await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(existing.points_earned, existing.user_id);
+      }
       if (existing.redemption_id) {
         await db.prepare('UPDATE redemptions SET used = 1, order_id = ? WHERE id = ?').run(existing.id, existing.redemption_id);
       }

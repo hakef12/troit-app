@@ -118,7 +118,9 @@ async function ensureSchema() {
 
     CREATE TABLE IF NOT EXISTS orders (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id),
+      user_id INTEGER REFERENCES users(id),
+      guest_name TEXT,
+      guest_phone TEXT,
       items_json TEXT NOT NULL,
       subtotal REAL NOT NULL,
       discount REAL NOT NULL DEFAULT 0,
@@ -174,6 +176,9 @@ async function ensureSchema() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_id INTEGER;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_title TEXT;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_discount REAL NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_name TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_phone TEXT;
+    ALTER TABLE orders ALTER COLUMN user_id DROP NOT NULL;
   `);
 }
 
