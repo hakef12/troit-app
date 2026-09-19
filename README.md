@@ -58,6 +58,17 @@ Corre en `http://localhost:5173`. En desarrollo, las llamadas a `/api` se rediri
 
 Cambia esta contraseña (o el usuario) antes de usar la app en producción.
 
+## Horario, cierre de pedidos y productos agotados
+
+Desde el panel de admin:
+
+- **Pestaña "Horario y estado"**: elegís entre *Automático* (abre y cierra solo según el horario semanal), *Cerrado ahora* (corta los pedidos a voluntad, con un mensaje opcional para el cliente) o *Abierto ahora* (recibe pedidos aunque esté fuera de horario). El horario se define por día, en hora de Ecuador; un cierre menor que la apertura (ej. 18:00 a 01:00) cuenta como cierre de madrugada. **Mientras no guardes un horario, el local recibe pedidos a cualquier hora.**
+- **Pestaña "Productos" → botón "Agotado"**: el producto sigue visible en el menú con la etiqueta *Agotado* y no se puede pedir. "Hay stock" lo vuelve a habilitar.
+
+Cuando el local está cerrado, el menú y el checkout muestran un aviso y el servidor rechaza los pedidos (no solo el botón). Lo mismo con productos agotados.
+
+**Envío a domicilio**: el cliente debe marcar su ubicación en el mapa; sin ese punto no se puede confirmar el pedido, para que siempre se cobre el envío real (el servidor también lo valida).
+
 ## Cómo usan la app tus clientes
 
 Al publicar la app (ver más abajo), tus clientes entran desde el navegador de su celular o PC. En Chrome/Edge/Safari van a ver la opción "Agregar a pantalla de inicio" / "Instalar app", y les queda como un ícono más, sin pasar por App Store ni Google Play.
