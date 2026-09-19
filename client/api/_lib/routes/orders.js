@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db, { transaction } from '../db.js';
 import { requireAuth, requireAdmin, optionalAuth } from '../auth.js';
-import { getDeliveryFee, getRoadKm } from '../deliveryPricing.js';
+import { getDeliveryFee, getRoadKm, haversineKm } from '../deliveryPricing.js';
+import { getStoreStatus } from '../storeStatus.js';
 import { computePromoDiscount } from '../promoRules.js';
 import { ah } from '../asyncHandler.js';
 
@@ -63,8 +64,25 @@ router.post('/', optionalAuth, ah(async (req, res) => {
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'El pedido debe tener al menos un producto' });
   }
+  const storeStatus = await getStoreStatus();
+  if (!storeStatus.open) {
+    return res.status(403).json({ error: storeStatus.message, closed: true });
+  }
   if (deliveryType === 'delivery' && (!address || !address.trim())) {
     return res.status(400).json({ error: 'La dirección es obligatoria para envío a domicilio' });
+  }
+  // Sin un punto exacto en el mapa no se puede calcular el envío real
+  if (deliveryType === 'delivery') {
+    const la = lat == null || lat === '' ? NaN : Number(lat);
+    const ln = lng == null || lng === '' ? NaN : Number(lng);
+    const validCoords = Number.isFinite(la) && Number.isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
+    // El mapa arranca centrado en el local: si el punto sigue ahí, el cliente no marcó su ubicación
+    const untouched =
+      validCoords && RESTAURANT_LAT && RESTAURANT_LNG &&
+      haversineKm(Number(RESTAURANT_LAT), Number(RESTAURANT_LNG), la, ln) < 0.03;
+    if (!validCoords || untouched) {
+      return res.status(400).json({ error: 'Marca tu ubicación de entrega en el mapa para calcular el costo real del envío' });
+    }
   }
   if (!['efectivo', 'transferencia'].includes(payment_method)) {
     return res.status(400).json({ error: 'Método de pago inválido (debe ser efectivo o transferencia)' });
@@ -89,6 +107,9 @@ router.post('/', optionalAuth, ah(async (req, res) => {
   for (const it of items) {
     const product = await db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(it.product_id);
     if (!product) return res.status(400).json({ error: `Producto ${it.product_id} no disponible` });
+    if (product.sold_out) {
+      return res.status(400).json({ error: `${product.name} está agotado. Quítalo del carrito para continuar.` });
+    }
     const qty = Math.max(1, Number(it.qty) || 1);
     resolvedItems.push({ id: product.id, name: product.name, price: product.price, qty, category: product.category });
     subtotal += product.price * qty;

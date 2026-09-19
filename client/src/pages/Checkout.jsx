@@ -30,6 +30,8 @@ export default function Checkout() {
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [coords, setCoords] = useState(null);
+  const [locationPicked, setLocationPicked] = useState(false);
+  const [catalog, setCatalog] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [redemptions, setRedemptions] = useState([]);
@@ -48,7 +50,22 @@ export default function Checkout() {
 
   useEffect(() => {
     api.getPromos().then((data) => setPromos(data.promos)).catch(() => {});
+    api
+      .getProducts()
+      .then((data) => setCatalog(new Map(data.products.map((p) => [p.id, p]))))
+      .catch(() => {});
   }, []);
+
+  // Productos del carrito que ya no se pueden pedir (agotados o dados de baja desde que se agregaron)
+  const unavailableItems = useMemo(() => {
+    if (!catalog) return [];
+    return items.filter((it) => {
+      const p = catalog.get(it.id);
+      return !p || p.sold_out;
+    });
+  }, [catalog, items]);
+
+  const storeClosed = Boolean(storeInfo && storeInfo.status && !storeInfo.status.open);
 
   const todayPromo = useMemo(() => promos.find((p) => p.day_of_week === new Date().getDay()), [promos]);
   const promoDiscountPreview = useMemo(() => computePromoDiscount(todayPromo, items), [todayPromo, items]);
@@ -75,7 +92,7 @@ export default function Checkout() {
   const [estimatingDelivery, setEstimatingDelivery] = useState(false);
 
   useEffect(() => {
-    if (deliveryType !== 'delivery' || !coords) {
+    if (deliveryType !== 'delivery' || !coords || !locationPicked) {
       setDeliveryEstimate({ km: null, fee: 0 });
       return undefined;
     }
@@ -88,25 +105,39 @@ export default function Checkout() {
         .finally(() => setEstimatingDelivery(false));
     }, 500);
     return () => clearTimeout(timeout);
-  }, [deliveryType, coords]);
+  }, [deliveryType, coords, locationPicked]);
 
   const deliveryKmPreview = deliveryEstimate.km;
   const deliveryFeePreview = deliveryEstimate.fee;
+  const needsLocation = deliveryType === 'delivery' && !locationPicked;
 
   async function handlePickLocation(lat, lng) {
     setCoords({ lat, lng });
+    setLocationPicked(true);
     const name = await reverseGeocode(lat, lng);
     if (name) setAddress(name);
   }
 
   async function handleConfirm() {
     setError('');
+    if (storeClosed) {
+      setError(storeInfo.status.message);
+      return;
+    }
+    if (needsLocation) {
+      setError('Marca tu ubicación en el mapa (toca el punto de entrega o usa "Usar mi ubicación") para calcular el envío');
+      return;
+    }
     if (deliveryType === 'delivery' && !address.trim()) {
       setError('Ingresa una dirección de entrega o selecciona una en el mapa');
       return;
     }
     if (items.length === 0) {
       setError('Tu carrito está vacío');
+      return;
+    }
+    if (unavailableItems.length > 0) {
+      setError(`No hay stock de: ${unavailableItems.map((it) => it.name).join(', ')}. Quítalo del carrito para continuar.`);
       return;
     }
     if (!user && !guestName.trim()) {
@@ -195,6 +226,13 @@ export default function Checkout() {
     <div className="page narrow">
       <h1>Tu pedido</h1>
       {error && <div className="alert error">{error}</div>}
+      {storeClosed && <div className="alert error store-closed">🔒 {storeInfo.status.message}</div>}
+      {unavailableItems.length > 0 && (
+        <div className="alert error">
+          Sin stock por ahora: <strong>{unavailableItems.map((it) => it.name).join(', ')}</strong>. Quítalo del carrito para
+          poder confirmar el pedido.
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="empty-state">
@@ -235,7 +273,12 @@ export default function Checkout() {
               <strong>−{formatMoney(discountPreview)}</strong>
             </div>
           )}
-          {deliveryType === 'delivery' && estimatingDelivery && (
+          {needsLocation && (
+            <div className="cart-total-row">
+              <span className="muted small">Envío: se calcula al marcar tu ubicación</span>
+            </div>
+          )}
+          {deliveryType === 'delivery' && !needsLocation && estimatingDelivery && (
             <div className="cart-total-row">
               <span className="muted small">Calculando envío…</span>
             </div>
@@ -300,7 +343,11 @@ export default function Checkout() {
               Dirección de entrega
               <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" />
             </label>
-            <p className="muted small">Toca el mapa, arrastra el marcador o usa tu ubicación para fijar el punto exacto.</p>
+            <p className={needsLocation ? 'location-hint required' : 'muted small'}>
+              {needsLocation
+                ? '📍 Obligatorio: toca el mapa en el punto de entrega, arrastra el marcador o usa "Usar mi ubicación". Con eso calculamos el costo real del envío.'
+                : '✓ Ubicación marcada. Puedes moverla tocando el mapa o arrastrando el marcador.'}
+            </p>
             {coords && (
               <AddressMap lat={coords.lat} lng={coords.lng} onPick={handlePickLocation} interactive showLocateButton />
             )}
@@ -350,8 +397,18 @@ export default function Checkout() {
           </label>
         )}
 
-        <button className="btn" onClick={handleConfirm} disabled={loading || items.length === 0}>
-          {loading ? 'Enviando…' : 'Confirmar pedido y enviar por WhatsApp'}
+        <button
+          className="btn"
+          onClick={handleConfirm}
+          disabled={loading || items.length === 0 || storeClosed || unavailableItems.length > 0 || needsLocation}
+        >
+          {loading
+            ? 'Enviando…'
+            : storeClosed
+              ? 'Local cerrado'
+              : needsLocation
+                ? 'Marca tu ubicación para continuar'
+                : 'Confirmar pedido y enviar por WhatsApp'}
         </button>
       </div>
     </div>

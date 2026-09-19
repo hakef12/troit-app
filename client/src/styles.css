@@ -1047,6 +1047,116 @@ h2 {
   }
 }
 
+.product-card.sold-out {
+  opacity: 0.75;
+}
+
+.product-card.sold-out .product-image img,
+.product-card.sold-out .product-image-placeholder {
+  filter: grayscale(1);
+}
+
+.sold-out-badge {
+  position: absolute;
+  bottom: -14px;
+  right: 10px;
+  background: var(--ink);
+  color: var(--white);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.sold-out-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.store-closed {
+  font-weight: 600;
+}
+
+.location-hint.required {
+  background: #fff4e5;
+  border: 2px solid #f0a020;
+  color: #7a4a00;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  background: var(--white);
+}
+
+.mode-option.active {
+  border-color: var(--red);
+  background: #fff5f5;
+}
+
+.mode-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-row:last-child {
+  border-bottom: 0;
+}
+
+.schedule-day {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 9rem;
+  font-weight: 600;
+}
+
+.schedule-times {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.schedule-times input[type='time'] {
+  width: auto;
+}
+
 /* Mini juego */
 .runner-game {
   margin-bottom: 1.5rem;

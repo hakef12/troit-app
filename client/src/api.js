@@ -47,6 +47,7 @@ export const api = {
   updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PUT', body: { status } }),
 
   getStoreInfo: () => request('/store-info', { auth: false }),
+  updateStoreSettings: (payload) => request('/store-info/settings', { method: 'PUT', body: payload }),
 
   getDeliveryEstimate: (lat, lng) => request(`/delivery-estimate?lat=${lat}&lng=${lng}`, { auth: false }),
 

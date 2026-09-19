@@ -67,6 +67,16 @@ export default function AdminProducts() {
     load();
   }
 
+  async function toggleSoldOut(p) {
+    setError('');
+    try {
+      await api.updateProduct(p.id, { sold_out: !p.sold_out });
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return (
     <div>
       <h2>{editingId ? 'Editar producto' : 'Nuevo producto'}</h2>
@@ -129,8 +139,16 @@ export default function AdminProducts() {
               </div>
             </div>
             <span>${Number(p.price).toFixed(2)}</span>
-            <span>{p.active ? 'Activo' : 'Inactivo'}</span>
+            <span>
+              {p.active ? 'Activo' : 'Inactivo'}
+              {p.active && p.sold_out ? <span className="sold-out-tag">Agotado</span> : null}
+            </span>
             <div className="row-actions">
+              {p.active && (
+                <button className="link-btn" onClick={() => toggleSoldOut(p)}>
+                  {p.sold_out ? 'Hay stock' : 'Agotado'}
+                </button>
+              )}
               <button className="link-btn" onClick={() => startEdit(p)}>
                 Editar
               </button>

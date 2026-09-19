@@ -4,9 +4,11 @@ import AdminCoupons from './AdminCoupons.jsx';
 import AdminOrders from './AdminOrders.jsx';
 import AdminPromos from './AdminPromos.jsx';
 import AdminBanners from './AdminBanners.jsx';
+import AdminStore from './AdminStore.jsx';
 
 const TABS = [
   { id: 'orders', label: 'Pedidos' },
+  { id: 'store', label: 'Horario y estado' },
   { id: 'products', label: 'Productos' },
   { id: 'coupons', label: 'Cupones' },
   { id: 'promos', label: 'Promos del día' },
@@ -27,6 +29,7 @@ export default function AdminDashboard() {
         ))}
       </div>
       {tab === 'orders' && <AdminOrders />}
+      {tab === 'store' && <AdminStore />}
       {tab === 'products' && <AdminProducts />}
       {tab === 'coupons' && <AdminCoupons />}
       {tab === 'promos' && <AdminPromos />}

@@ -20,6 +20,7 @@ export default function Menu() {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [storeStatus, setStoreStatus] = useState(null);
   const [category, setCategory] = useState('Todas');
   const { addItem, items } = useCart();
   const [justAdded, setJustAdded] = useState(null);
@@ -42,6 +43,7 @@ export default function Menu() {
       .finally(() => setLoading(false));
     api.getPromos().then((data) => setPromos(data.promos)).catch(() => {});
     api.getBanners().then((data) => setBanners(data.banners)).catch(() => {});
+    api.getStoreInfo().then((data) => setStoreStatus(data.status)).catch(() => {});
   }, []);
 
   const todayPromo = useMemo(() => promos.find((p) => p.day_of_week === new Date().getDay()), [promos]);
@@ -78,6 +80,11 @@ export default function Menu() {
       </div>
 
       {error && <div className="alert error">{error}</div>}
+      {storeStatus && !storeStatus.open && (
+        <div className="alert error store-closed">
+          🔒 {storeStatus.message} Puedes ver el menú, pero por ahora no se pueden hacer pedidos.
+        </div>
+      )}
       {loading && <div className="page-loading">Cargando menú…</div>}
 
       {todayPromo && (
@@ -109,26 +116,30 @@ export default function Menu() {
 
       <div className="product-grid">
         {visible.map((p) => (
-          <div className="product-card" key={p.id}>
+          <div className={`product-card ${p.sold_out ? 'sold-out' : ''}`} key={p.id}>
             <div className="product-image">
               {p.image_url ? (
                 <img src={p.image_url} alt={p.name} />
               ) : (
                 <div className="product-image-placeholder">🍕</div>
               )}
-              <button
-                type="button"
-                className="add-fab"
-                aria-label={`Agregar ${p.name}`}
-                onClick={() => {
-                  addItem(p);
-                  setJustAdded(p.id);
-                  setTimeout(() => setJustAdded(null), 900);
-                }}
-              >
-                {justAdded === p.id ? '✓' : '+'}
-                {qtyInCart(p.id) > 0 && <span className="fab-badge">{qtyInCart(p.id)}</span>}
-              </button>
+              {p.sold_out ? (
+                <span className="sold-out-badge">Agotado</span>
+              ) : (
+                <button
+                  type="button"
+                  className="add-fab"
+                  aria-label={`Agregar ${p.name}`}
+                  onClick={() => {
+                    addItem(p);
+                    setJustAdded(p.id);
+                    setTimeout(() => setJustAdded(null), 900);
+                  }}
+                >
+                  {justAdded === p.id ? '✓' : '+'}
+                  {qtyInCart(p.id) > 0 && <span className="fab-badge">{qtyInCart(p.id)}</span>}
+                </button>
+              )}
             </div>
             <div className="product-info">
               <h3>{p.name}</h3>

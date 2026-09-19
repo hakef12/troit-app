@@ -156,6 +156,11 @@ async function ensureSchema() {
       rule_price REAL
     );
 
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS banners (
       id SERIAL PRIMARY KEY,
       title TEXT,
@@ -179,6 +184,7 @@ async function ensureSchema() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_name TEXT;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_phone TEXT;
     ALTER TABLE orders ALTER COLUMN user_id DROP NOT NULL;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS sold_out INTEGER NOT NULL DEFAULT 0;
   `);
 }
 
