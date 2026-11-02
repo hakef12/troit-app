@@ -5,6 +5,7 @@ import { getDeliveryFee, getRoadKm, haversineKm } from '../deliveryPricing.js';
 import { getStoreStatus } from '../storeStatus.js';
 import { computePromoDiscount } from '../promoRules.js';
 import { ah } from '../asyncHandler.js';
+import { buildBreakdown, round2 } from '../vat.js';
 
 const router = Router();
 const POINTS_PER_UNIT = Number(process.env.POINTS_PER_UNIT || 1000);
@@ -21,7 +22,7 @@ function mapsLink(lat, lng) {
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
-function buildWhatsappMessage({ order, items, customerName }) {
+function buildWhatsappMessage({ order, breakdown, customerName }) {
   const lines = [];
   lines.push(`*Nuevo pedido #${order.id}*`);
   lines.push('');
@@ -37,17 +38,18 @@ function buildWhatsappMessage({ order, items, customerName }) {
   }
   lines.push('');
   lines.push('Productos:');
-  for (const it of items) {
-    lines.push(`- ${it.qty}x ${it.name} (${formatMoney(it.price)} c/u) = ${formatMoney(it.price * it.qty)}`);
+  // Los precios de los productos se muestran sin IVA; el IVA va en una sola línea al final
+  for (const l of breakdown.lines) {
+    lines.push(`- ${l.qty}x ${l.name} = ${formatMoney(l.base)}`);
   }
+  if (order.promo_discount > 0) lines.push(`Promo del día (${order.promo_title}): -${formatMoney(breakdown.promoBase)}`);
+  if (order.discount > 0) lines.push(`Descuento cupón: -${formatMoney(breakdown.couponBase)}`);
   lines.push('');
-  lines.push(`Subtotal: ${formatMoney(order.subtotal)}`);
-  if (order.promo_discount > 0) lines.push(`Promo del día (${order.promo_title}): -${formatMoney(order.promo_discount)}`);
-  if (order.discount > 0) lines.push(`Descuento cupón: -${formatMoney(order.discount)}`);
   if (order.delivery_fee > 0) {
     const kmText = order.delivery_km != null ? ` (${order.delivery_km.toFixed(1)} km)` : '';
     lines.push(`Envío${kmText}: ${formatMoney(order.delivery_fee)}`);
   }
+  lines.push(`IVA 15%: ${formatMoney(order.vat_amount)}`);
   lines.push(`*Total: ${formatMoney(order.total)}*`);
   lines.push('');
   lines.push(`Método de pago: ${order.payment_method === 'transferencia' ? 'Transferencia bancaria' : 'Efectivo'}`);
@@ -151,13 +153,16 @@ router.post('/', optionalAuth, ah(async (req, res) => {
     deliveryFee = getDeliveryFee(deliveryKm);
   }
 
-  const total = Math.round((foodTotal + deliveryFee) * 100) / 100;
+  // Los productos ya incluyen IVA; el envío (tarifario sin IVA) se cobra con IVA encima.
+  const breakdown = buildBreakdown({ items: resolvedItems, promoDiscount, couponDiscount: discount, deliveryFee });
+  const total = round2(foodTotal + breakdown.deliveryGross);
+  const vatAmount = round2(total - breakdown.foodBase - deliveryFee);
 
   const orderId = await transaction(async () => {
     const info = await db
       .prepare(
-        `INSERT INTO orders (user_id, guest_name, guest_phone, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km, promo_id, promo_title, promo_discount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO orders (user_id, guest_name, guest_phone, items_json, subtotal, discount, total, payment_method, address, status, points_earned, redemption_id, delivery_type, lat, lng, delivery_fee, delivery_km, promo_id, promo_title, promo_discount, vat_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         req.userId,
@@ -178,7 +183,8 @@ router.post('/', optionalAuth, ah(async (req, res) => {
         deliveryKm,
         promoDiscount > 0 ? todayPromo.id : null,
         promoDiscount > 0 ? todayPromo.title : null,
-        promoDiscount
+        promoDiscount,
+        vatAmount
       );
     if (!isGuest) {
       await db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(pointsEarned, req.userId);
@@ -194,13 +200,13 @@ router.post('/', optionalAuth, ah(async (req, res) => {
 
   const message = buildWhatsappMessage({
     order,
-    items: resolvedItems,
+    breakdown,
     customerName: isGuest ? guest_name.trim() : updatedUser.name,
   });
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
   res.status(201).json({
-    order,
+    order: { ...order, delivery_fee_with_vat: breakdown.deliveryGross },
     points: isGuest ? null : updatedUser.points,
     whatsappUrl,
     whatsappMessage: message,

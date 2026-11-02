@@ -185,6 +185,7 @@ async function ensureSchema() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_phone TEXT;
     ALTER TABLE orders ALTER COLUMN user_id DROP NOT NULL;
     ALTER TABLE products ADD COLUMN IF NOT EXISTS sold_out INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_amount REAL NOT NULL DEFAULT 0;
   `);
 }
 

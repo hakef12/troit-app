@@ -69,6 +69,10 @@ Cuando el local está cerrado, el menú y el checkout muestran un aviso y el ser
 
 **Envío a domicilio**: el cliente debe marcar su ubicación en el mapa; sin ese punto no se puede confirmar el pedido, para que siempre se cobre el envío real (el servidor también lo valida).
 
+## IVA
+
+Los precios del menú ya incluyen el IVA (15%); el cliente los ve como valor total. El tarifario del envío se considera **sin IVA** y se le suma el 15% al cobrar. En el mensaje de WhatsApp los productos salen sin IVA y hay una sola línea `IVA 15%` que suma el IVA de productos y envío. Los descuentos (promo del día y cupones) se aplican sobre el precio con IVA y se muestran también sin IVA. La tasa y los cálculos están en `client/api/_lib/vat.js`. Los puntos se calculan solo sobre la comida (sin envío).
+
 ## Cómo usan la app tus clientes
 
 Al publicar la app (ver más abajo), tus clientes entran desde el navegador de su celular o PC. En Chrome/Edge/Safari van a ver la opción "Agregar a pantalla de inicio" / "Instalar app", y les queda como un ícono más, sin pasar por App Store ni Google Play.

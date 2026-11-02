@@ -46,6 +46,7 @@ export default function AdminOrders() {
                   Envío{o.delivery_km != null ? ` (${Number(o.delivery_km).toFixed(1)} km)` : ''}: {formatMoney(o.delivery_fee)}
                 </div>
               )}
+              {o.vat_amount > 0 && <div className="muted small">IVA 15%: {formatMoney(o.vat_amount)}</div>}
               {o.promo_discount > 0 && (
                 <div className="muted small">
                   🔥 Promo aplicada ({o.promo_title}): −{formatMoney(o.promo_discount)}

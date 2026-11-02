@@ -108,7 +108,7 @@ export default function Checkout() {
   }, [deliveryType, coords, locationPicked]);
 
   const deliveryKmPreview = deliveryEstimate.km;
-  const deliveryFeePreview = deliveryEstimate.fee;
+  const deliveryFeePreview = deliveryEstimate.feeWithVat ?? deliveryEstimate.fee;
   const needsLocation = deliveryType === 'delivery' && !locationPicked;
 
   async function handlePickLocation(lat, lng) {
@@ -194,8 +194,8 @@ export default function Checkout() {
           {result.order.delivery_fee > 0 && (
             <p>
               Costo de envío
-              {result.order.delivery_km != null ? ` (${result.order.delivery_km.toFixed(1)} km)` : ''}:{' '}
-              <strong>{formatMoney(result.order.delivery_fee)}</strong>
+              {result.order.delivery_km != null ? ` (${result.order.delivery_km.toFixed(1)} km)` : ''} con IVA:{' '}
+              <strong>{formatMoney(result.order.delivery_fee_with_vat ?? result.order.delivery_fee)}</strong>
             </p>
           )}
           <p>
@@ -285,7 +285,7 @@ export default function Checkout() {
           )}
           {deliveryType === 'delivery' && !estimatingDelivery && deliveryFeePreview > 0 && (
             <div className="cart-total-row">
-              <span>Envío{deliveryKmPreview != null ? ` (${deliveryKmPreview.toFixed(1)} km)` : ''}</span>
+              <span>Envío{deliveryKmPreview != null ? ` (${deliveryKmPreview.toFixed(1)} km)` : ''} · IVA incl.</span>
               <strong>{formatMoney(deliveryFeePreview)}</strong>
             </div>
           )}
