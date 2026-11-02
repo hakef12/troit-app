@@ -7,6 +7,7 @@ import mascot from '../assets/mascot.svg';
 import peaceHands from '../assets/mascot-peace-hands.png';
 import AddressMap from '../components/AddressMap.jsx';
 import { computePromoDiscount } from '../promoRules.js';
+import { buildSummary } from '../vat.js';
 import LottieIcon from '../components/LottieIcon.jsx';
 import confettiAnim from '../assets/lottie/confetti.json';
 import successCheckAnim from '../assets/lottie/success-check.json';
@@ -108,8 +109,20 @@ export default function Checkout() {
   }, [deliveryType, coords, locationPicked]);
 
   const deliveryKmPreview = deliveryEstimate.km;
-  const deliveryFeePreview = deliveryEstimate.feeWithVat ?? deliveryEstimate.fee;
+  const deliveryFeePreview = deliveryType === 'delivery' ? deliveryEstimate.fee : 0;
   const needsLocation = deliveryType === 'delivery' && !locationPicked;
+
+  const summary = useMemo(
+    () =>
+      buildSummary({
+        items,
+        promoDiscount: promoDiscountPreview,
+        couponDiscount: discountPreview,
+        deliveryFee: deliveryFeePreview,
+      }),
+    [items, promoDiscountPreview, discountPreview, deliveryFeePreview]
+  );
+  const baseByItem = new Map(summary.lines.map((l) => [l.id, l.base]));
 
   async function handlePickLocation(lat, lng) {
     setCoords({ lat, lng });
@@ -194,8 +207,13 @@ export default function Checkout() {
           {result.order.delivery_fee > 0 && (
             <p>
               Costo de envío
-              {result.order.delivery_km != null ? ` (${result.order.delivery_km.toFixed(1)} km)` : ''} con IVA:{' '}
-              <strong>{formatMoney(result.order.delivery_fee_with_vat ?? result.order.delivery_fee)}</strong>
+              {result.order.delivery_km != null ? ` (${result.order.delivery_km.toFixed(1)} km)` : ''}:{' '}
+              <strong>{formatMoney(result.order.delivery_fee)}</strong>
+            </p>
+          )}
+          {result.order.vat_amount > 0 && (
+            <p>
+              IVA 15%: <strong>{formatMoney(result.order.vat_amount)}</strong>
             </p>
           )}
           <p>
@@ -251,26 +269,26 @@ export default function Checkout() {
                 <span>{it.qty}</span>
                 <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
               </div>
-              <span className="cart-price">{formatMoney(it.price * it.qty)}</span>
+              <span className="cart-price">{formatMoney(baseByItem.get(it.id) ?? 0)}</span>
               <button className="link-btn danger" onClick={() => removeItem(it.id)}>
                 ✕
               </button>
             </div>
           ))}
           <div className="cart-total-row">
-            <span>Subtotal</span>
-            <strong>{formatMoney(total)}</strong>
+            <span>Subtotal (sin IVA)</span>
+            <strong>{formatMoney(summary.itemsBase)}</strong>
           </div>
           {promoDiscountPreview > 0 && (
             <div className="cart-total-row discount">
               <span>Promo del día ({todayPromo.title})</span>
-              <strong>−{formatMoney(promoDiscountPreview)}</strong>
+              <strong>−{formatMoney(summary.promoBase)}</strong>
             </div>
           )}
           {chosenRedemption && (
             <div className="cart-total-row discount">
               <span>Descuento ({chosenRedemption.title})</span>
-              <strong>−{formatMoney(discountPreview)}</strong>
+              <strong>−{formatMoney(summary.couponBase)}</strong>
             </div>
           )}
           {needsLocation && (
@@ -285,17 +303,17 @@ export default function Checkout() {
           )}
           {deliveryType === 'delivery' && !estimatingDelivery && deliveryFeePreview > 0 && (
             <div className="cart-total-row">
-              <span>Envío{deliveryKmPreview != null ? ` (${deliveryKmPreview.toFixed(1)} km)` : ''} · IVA incl.</span>
+              <span>Envío{deliveryKmPreview != null ? ` (${deliveryKmPreview.toFixed(1)} km)` : ''}</span>
               <strong>{formatMoney(deliveryFeePreview)}</strong>
             </div>
           )}
+          <div className="cart-total-row">
+            <span>IVA 15%</span>
+            <strong>{formatMoney(summary.vat)}</strong>
+          </div>
           <div className="cart-total-row final">
             <span>Total</span>
-            <strong>
-              {formatMoney(
-                afterPromoPreview - discountPreview + (deliveryType === 'delivery' ? deliveryFeePreview : 0)
-              )}
-            </strong>
+            <strong>{formatMoney(summary.total)}</strong>
           </div>
         </div>
       )}
